@@ -5,6 +5,7 @@
         { "path": "packages/config" },
         { "path": "packages/parser-sahibinden" },
         { "path": "packages/scraper-engine" },
+        { "path": "packages/database" },
         { "path": "apps/cli" }
     ]
 }

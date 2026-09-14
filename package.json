@@ -13,6 +13,10 @@
         "typecheck": "tsc -b tsconfig.json",
         "test": "vitest run",
         "lint": "eslint .",
+        "db:generate": "pnpm --filter @sahibindenbot/database exec prisma generate",
+        "db:migrate": "pnpm --filter @sahibindenbot/database exec prisma migrate deploy",
+        "db:seed": "pnpm --filter @sahibindenbot/database exec tsx prisma/seed.ts",
+        "db:studio": "pnpm --filter @sahibindenbot/database exec prisma studio",
         "clean": "git clean -fdx packages apps --exclude node_modules || true"
     },
     "pnpm": {

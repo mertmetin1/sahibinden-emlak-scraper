@@ -5,7 +5,10 @@ packages:
 # Chrome is installed locally; puppeteer's browser download is unnecessary.
 # esbuild's binary arrives via optional platform deps; postinstall not needed.
 allowBuilds:
+  '@prisma/client': set this to true or false
+  '@prisma/engines': set this to true or false
   esbuild: set this to true or false
+  prisma: set this to true or false
   puppeteer: set this to true or false
 ignoredBuiltDependencies:
     - esbuild

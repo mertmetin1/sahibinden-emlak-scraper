@@ -1,0 +1,37 @@
+services:
+    postgres:
+        image: postgres:17-alpine
+        container_name: sahibindenbot-postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: sahibinden
+            POSTGRES_PASSWORD: sahibinden_local_dev
+            POSTGRES_DB: sahibindenbot
+        ports:
+            # 5432 is occupied by a local Windows PostgreSQL on this host
+            - '5433:5432'
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U sahibinden -d sahibindenbot']
+            interval: 5s
+            timeout: 3s
+            retries: 12
+
+    redis:
+        image: redis:7-alpine
+        container_name: sahibindenbot-redis
+        restart: unless-stopped
+        ports:
+            - '6379:6379'
+        volumes:
+            - redis-data:/data
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 12
+
+volumes:
+    postgres-data:
+    redis-data:

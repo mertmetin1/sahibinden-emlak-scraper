@@ -1,0 +1,476 @@
+// SahibindenBot3 — persistence model (PostgreSQL).
+//
+// Conventions:
+// - Entity ids are cuid() strings, EXCEPT ScanRunEvent (BigInt autoincrement —
+//   the id doubles as the ordering sequence for SSE replay).
+// - Listing identity is (source, sourceListingId) — the canonical dedupe key.
+// - Seller identity is (source, profileUrl). profileUrl is NOT nullable: a
+//   missing profile URL is stored as the SENTINEL empty string '' so the
+//   unique constraint stays usable (PostgreSQL treats NULLs as distinct).
+//   Repository code maps null <-> '' at the boundary. Consequence: all
+//   profile-less sellers of one source share a single sentinel row whose
+//   name/phone fields are last-writer-wins — treat sentinel-row seller data
+//   as best-effort only.
+// - Secret material (proxy credentials, cookie JSON) is stored as opaque
+//   AES-256-GCM envelope strings. This layer stores/reads ciphertext only;
+//   it NEVER encrypts or decrypts (that is the worker's job, via shared/crypto).
+// - Listing.sellerType is a DENORMALIZED copy of Seller.type (plain string,
+//   no FK) kept for fast UI filtering; the repository rewrites it on every
+//   detail upsert.
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ListingStatus {
+    ACTIVE
+    STALE
+    REMOVED // only on explicit site signal ("yayından kaldırıldı"), never on absence
+}
+
+enum SellerType {
+    OWNER
+    REAL_ESTATE_OFFICE
+    CONSTRUCTION_COMPANY
+    OTHER
+    UNKNOWN
+}
+
+enum ScanRunStatus {
+    QUEUED
+    STARTING
+    RUNNING
+    CANCELLING
+    CANCELLED
+    SUCCEEDED
+    PARTIAL
+    FAILED
+}
+
+enum ScanTrigger {
+    MANUAL
+    SCHEDULE
+    TEST
+    RETRY
+}
+
+enum RunListingOutcome {
+    INSERTED
+    UPDATED
+    PRICE_CHANGED
+    UNCHANGED
+}
+
+enum ProxyStrategy {
+    ROUND_ROBIN
+    SESSION_STICKY
+}
+
+enum ProxyHealthStatus {
+    UNKNOWN
+    HEALTHY
+    DEGRADED
+    UNHEALTHY
+    DISABLED
+}
+
+enum CookieValidationStatus {
+    UNKNOWN
+    VALID
+    EXPIRED
+    INVALID
+}
+
+// ---------------------------------------------------------------------------
+// Listings
+// ---------------------------------------------------------------------------
+
+model Listing {
+    id              String        @id @default(cuid())
+    source          String        @default("sahibinden.com")
+    sourceListingId String // data-id / id from URL
+
+    // current snapshot
+    canonicalUrl String
+    title        String
+    description  String        @default("") @db.Text
+    status       ListingStatus @default(ACTIVE)
+
+    // money (normalized; TL unless noted)
+    price                Int? // TL, kuruşsuz
+    currency             String  @default("TL")
+    pricePerSquareMeter  Int?
+
+    // classification
+    listingType      String? // 'SALE' | 'RENT' | 'UNKNOWN'
+    propertyCategory String?
+    propertySubtype  String?
+
+    // property attributes (normalized; raw Turkish values preserved as strings)
+    grossAreaM2     Int?
+    netAreaM2       Int?
+    rooms           String?
+    buildingAge     String?
+    floor           String?
+    totalFloors     String?
+    heating         String?
+    bathroomCount   String?
+    balcony         String?
+    furnished       String?
+    usageStatus     String?
+    insideSite      String?
+    siteName        String?
+    dues            String?
+    deposit         String?
+    deedStatus      String?
+    creditEligible  String?
+    exchangeEligible String?
+
+    // location
+    province     String?
+    district     String?
+    neighborhood String?
+    locationRaw  String  @default("")
+
+    // dates (parsed + raw preserved)
+    listingDate    DateTime?
+    listingDateRaw String?
+    updatedDate    DateTime?
+    updatedDateRaw String?
+
+    // contact — ONLY when rendered in the initially authorized DOM (no reveal)
+    publicContactPhone String?
+
+    // media
+    videoUrl       String?
+    virtualTourUrl String?
+
+    // seller (FK) + denormalized type copy for fast filtering
+    sellerId   String?
+    seller     Seller? @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+    sellerType String? // DENORMALIZED mirror of Seller.type — kept in sync on write
+
+    // staleness bookkeeping
+    missedRunCount Int @default(0)
+
+    // sightings
+    firstSeenAt    DateTime
+    lastSeenAt     DateTime
+    firstSeenRunId String?
+    lastSeenRunId  String?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    images       ListingImage[]
+    attributes   ListingAttribute[]
+    priceHistory ListingPriceHistory[]
+    seenHistory  ListingSeenHistory[]
+    runLinks     ScanRunListing[]
+
+    @@unique([source, sourceListingId]) // CANONICAL IDENTITY
+    @@index([status])
+    @@index([province, district])
+    @@index([sellerType])
+    @@index([lastSeenAt])
+}
+
+model ListingImage {
+    id          String   @id @default(cuid())
+    listingId   String
+    listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    url         String
+    position    Int      @default(0)
+    isPrimary   Boolean  @default(false)
+    firstSeenAt DateTime
+    lastSeenAt  DateTime
+
+    @@unique([listingId, url])
+}
+
+model ListingAttribute {
+    id          String   @id @default(cuid())
+    listingId   String
+    listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    key         String // normalized Turkish label, e.g. "Oda Sayısı"
+    value       String
+    firstSeenAt DateTime
+    lastSeenAt  DateTime
+
+    @@unique([listingId, key])
+}
+
+model ListingPriceHistory {
+    id                   String   @id @default(cuid())
+    listingId            String
+    listing              Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    price                Int
+    currency             String
+    pricePerSquareMeter  Int?
+    runId                String?
+    changedAt            DateTime @default(now())
+
+    @@index([listingId, changedAt])
+}
+
+// Append-only sighting log (timelines, stale recomputation).
+model ListingSeenHistory {
+    id        String   @id @default(cuid())
+    listingId String
+    listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    runId     String
+    seenAt    DateTime @default(now())
+
+    @@index([listingId])
+    @@index([runId])
+}
+
+// ---------------------------------------------------------------------------
+// Sellers
+// ---------------------------------------------------------------------------
+
+model Seller {
+    id                 String    @id @default(cuid())
+    source             String    @default("sahibinden.com")
+    type               SellerType @default(UNKNOWN)
+    typeEvidence       String? // matched on-page phrase, e.g. "Emlak Ofisinden"
+    displayName        String?
+    officeName         String?
+    profileUrl         String    @default("") // SENTINEL '' = no profile URL (see header note)
+    publicContactPhone String?
+    firstSeenAt        DateTime
+    lastSeenAt         DateTime
+    createdAt          DateTime  @default(now())
+    updatedAt          DateTime  @updatedAt
+
+    listings Listing[]
+
+    @@unique([source, profileUrl])
+}
+
+// ---------------------------------------------------------------------------
+// Scans & runs
+// ---------------------------------------------------------------------------
+
+model ScanDefinition {
+    id          String  @id @default(cuid())
+    name        String
+    description String  @default("")
+    enabled     Boolean @default(true)
+
+    startUrls Json // string[]
+    schedule  String? // 5-field cron, evaluated in `timezone`; null = manual only
+    timezone  String  @default("Europe/Istanbul")
+
+    maxItems Int? // null = unlimited
+    maxPages Int? // null = unlimited
+
+    includeDetails  Boolean @default(false)
+    incrementalMode Boolean @default(false) // excluded from stale detection
+
+    maxConcurrency              Int @default(3)
+    navigationTimeoutSeconds    Int @default(90)
+    requestHandlerTimeoutSeconds Int @default(180)
+    maxRequestRetries           Int @default(8)
+    delayMinMs                  Int @default(2000)
+    delayMaxMs                  Int @default(5000)
+
+    browserMode String  @default("cdp") // 'cdp' | 'managed'
+    cdpUrl      String?
+
+    proxyProfileId   String?
+    proxyProfile     ProxyProfile?   @relation(fields: [proxyProfileId], references: [id], onDelete: SetNull)
+    cookieProfileId  String?
+    cookieProfile    CookieProfile?  @relation(fields: [cookieProfileId], references: [id], onDelete: SetNull)
+    sessionPolicyId  String?
+    sessionPolicy    SessionPolicy?  @relation(fields: [sessionPolicyId], references: [id], onDelete: SetNull)
+
+    debugMode                 Boolean @default(false)
+    storeRawHtml              Boolean @default(false)
+    storeScreenshotsOnFailure Boolean @default(false)
+
+    staleDetectionEnabled     Boolean @default(true)
+    staleAfterSuccessfulRuns  Int     @default(3) // N consecutive successful runs missing the listing -> STALE
+
+    allowedDomains Json @default("[\"sahibinden.com\", \"www.sahibinden.com\"]")
+
+    humanInTheLoop Boolean @default(true)
+
+    runs ScanRun[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model ScanRun {
+    id               String        @id @default(cuid())
+    scanDefinitionId String
+    scanDefinition   ScanDefinition @relation(fields: [scanDefinitionId], references: [id], onDelete: Cascade)
+
+    status  ScanRunStatus @default(QUEUED)
+    trigger ScanTrigger   @default(MANUAL)
+
+    configurationSnapshot Json // immutable deep-copy of execution config (see ARCHITECTURE §4.2)
+
+    // counters
+    pagesVisited         Int @default(0)
+    categoryPagesVisited Int @default(0)
+    detailPagesVisited   Int @default(0)
+    itemsDiscovered      Int @default(0)
+    itemsInserted        Int @default(0)
+    itemsUpdated         Int @default(0)
+    pricesChanged        Int @default(0)
+    failedRequests       Int @default(0)
+    retryCount           Int @default(0)
+
+    errorSummary String? // redacted, human-readable
+
+    startedAt   DateTime?
+    finishedAt  DateTime?
+    durationMs  Int?
+    heartbeatAt DateTime? // worker updates while RUNNING; sweeper watches this
+
+    createdAt DateTime @default(now())
+
+    events     ScanRunEvent[]
+    runListings ScanRunListing[]
+
+    @@index([scanDefinitionId, createdAt])
+    @@index([status])
+}
+
+// id doubles as the ordering sequence for SSE replay (Last-Event-ID).
+model ScanRunEvent {
+    id        BigInt   @id @default(autoincrement())
+    runId     String
+    run       ScanRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+    type      String
+    data      Json?
+    createdAt DateTime @default(now())
+
+    @@index([runId, id])
+}
+
+// Per-run change journal: one row per (run, listing) observation.
+model ScanRunListing {
+    runId     String
+    run       ScanRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+    listingId String
+    listing   Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    outcome   RunListingOutcome
+
+    @@id([runId, listingId])
+    @@index([listingId])
+}
+
+// ---------------------------------------------------------------------------
+// Proxy / cookie / session configuration
+// ---------------------------------------------------------------------------
+
+model ProxyProfile {
+    id        String        @id @default(cuid())
+    name      String
+    strategy  ProxyStrategy @default(ROUND_ROBIN)
+    enabled   Boolean       @default(true)
+
+    endpoints       ProxyEndpoint[]
+    scanDefinitions ScanDefinition[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model ProxyEndpoint {
+    id        String       @id @default(cuid())
+    profileId String
+    profile   ProxyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+    name     String?
+    host     String
+    port     Int
+    protocol String  @default("http") // 'http' | 'https' | 'socks5'
+
+    // OPAQUE CIPHERTEXT (AES-256-GCM envelopes) — never decrypted in this layer
+    usernameEncrypted String?
+    passwordEncrypted String?
+
+    enabled Boolean @default(true)
+    weight  Int     @default(1)
+    country String?
+    notes   String  @default("")
+
+    lastCheckedAt DateTime?
+    lastSuccessAt DateTime?
+    lastFailureAt DateTime?
+    successCount  Int       @default(0)
+    failureCount  Int       @default(0)
+    latencyMs     Int?
+    healthStatus  ProxyHealthStatus @default(UNKNOWN)
+    quarantinedUntil DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([profileId, healthStatus])
+}
+
+model CookieProfile {
+    id      String  @id @default(cuid())
+    name    String
+    enabled Boolean @default(true)
+
+    // OPAQUE CIPHERTEXT — AES-256-GCM envelope of the normalized cookie JSON array
+    encryptedCookieJson String
+
+    domainSummary   String  @default("") // e.g. ".sahibinden.com (28), .google.com (2)"
+    cookieCount     Int     @default(0)
+    expirySummary   String  @default("") // human-readable, e.g. "earliest 2026-10-01, latest 2027-09-14, 3 session"
+
+    lastValidatedAt  DateTime?
+    validationStatus CookieValidationStatus @default(UNKNOWN)
+
+    notes String @default("")
+
+    scanDefinitions ScanDefinition[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model SessionPolicy {
+    id   String @id @default(cuid())
+    name String
+
+    poolSize                 Int     @default(10)
+    maxUsageCount            Int     @default(50)
+    maxAgeMinutes            Int     @default(60)
+    persistCookiesPerSession Boolean @default(true)
+    proxyAffinity            Boolean @default(true) // pin session to one proxy endpoint
+    retireOnNetworkFailures  Boolean @default(true)
+    failureThreshold         Int     @default(3)
+
+    scanDefinitions ScanDefinition[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+    key       String   @id // e.g. 'browser.mode', 'scheduler.enabled'
+    value     Json
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
