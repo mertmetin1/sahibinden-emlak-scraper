@@ -6,3 +6,9 @@ storage/
 .vscode/
 *.log
 sahibinden-emlak-scraper-plan.md
+# Local runtime artifacts (may contain session data — never commit)
+.chrome-debug-profile/
+*.png
+.env
+.env.*
+!.env.example

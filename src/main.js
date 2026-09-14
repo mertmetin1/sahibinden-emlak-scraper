@@ -130,12 +130,17 @@ async function tryHoldPxButton(page) {
         ];
 
         let holdTarget = null;
+        // Search main frame AND iframes — PX captcha often renders inside an iframe
+        const frames = [page, ...page.frames().filter(f => f !== page.mainFrame())];
         for (const sel of selectors) {
-            holdTarget = await page.$(sel).catch(() => null);
-            if (holdTarget) {
-                log.info(`Found PX hold target with selector: ${sel}`);
-                break;
+            for (const frame of frames) {
+                holdTarget = await frame.$(sel).catch(() => null);
+                if (holdTarget) {
+                    log.info(`Found PX hold target with selector: ${sel} (frame: ${frame === page ? 'main' : 'iframe'})`);
+                    break;
+                }
             }
+            if (holdTarget) break;
         }
 
         if (!holdTarget) {
@@ -180,6 +185,27 @@ async function tryHoldPxButton(page) {
         log.warning(`PX hold attempt error: ${e.message}`);
         return false;
     }
+}
+
+// In headed mode, give the user a chance to solve the challenge manually
+// in the visible browser window. Polls until the challenge disappears.
+async function waitForManualSolve(page, timeoutMs = 180000) {
+    if (process.env.HEADLESS === 'false') {
+        log.warning('>>> MANUEL COZUM GEREKLI: Acilan tarayicida dogrulamayi coz ("Basili Tutun" basil tut / "robot degilim" isaretle). 3 dakika bekleniyor...');
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            await new Promise(r => setTimeout(r, 3000));
+            const html = await page.content().catch(() => '');
+            const url = page.url();
+            if (!html) continue; // mid-navigation, keep waiting
+            if (!isPxHoldChallenge(html) && !isChallengedPage(html) && !url.includes('/giris')) {
+                log.info('>>> Manuel dogrulama basarili, devam ediliyor!');
+                return true;
+            }
+        }
+        log.warning('>>> Manuel cozum suresi doldu.');
+    }
+    return false;
 }
 
 let debugCounter = 0;
@@ -497,8 +523,11 @@ const crawler = new PuppeteerCrawler({
                     if (!pxSolved) {
                         log.warning('PerimeterX hold challenge failed. Provide _px3/_pxhd/_pxvid/pxcts cookies from your browser to bypass this.');
                         await saveDebugInfo(page, `${statusCode}-px-hold-failed`);
-                        if (session) session.markBad();
-                        throw new Error('PerimeterX hold challenge not resolved');
+                        const manualSolved = await waitForManualSolve(page);
+                        if (!manualSolved) {
+                            if (session) session.markBad();
+                            throw new Error('PerimeterX hold challenge not resolved');
+                        }
                     }
                 } else if (isChallengedPage(content)) {
                     log.info('Cloudflare challenge page detected, waiting for auto-resolution...');
@@ -513,23 +542,32 @@ const crawler = new PuppeteerCrawler({
                             await saveDebugInfo(page, `${statusCode}-cf-then-px`);
                             const pxSolved = await tryHoldPxButton(page);
                             if (!pxSolved) {
-                                if (session) session.markBad();
-                                throw new Error('PerimeterX hold challenge not resolved after CF');
+                                const manualSolved = await waitForManualSolve(page);
+                                if (!manualSolved) {
+                                    if (session) session.markBad();
+                                    throw new Error('PerimeterX hold challenge not resolved after CF');
+                                }
                             }
                         } else if (isChallengedPage(resolvedContent)) {
-                            log.warning('Cloudflare challenge navigated to another challenge page. Marking session bad.');
+                            log.warning('Cloudflare challenge navigated to another challenge page. Waiting for manual solve...');
                             await saveDebugInfo(page, `${statusCode}-challenge-still-blocked`);
-                            if (session) session.markBad();
-                            throw new Error('Cloudflare Turnstile challenge requires manual verification');
+                            const manualSolved = await waitForManualSolve(page);
+                            if (!manualSolved) {
+                                if (session) session.markBad();
+                                throw new Error('Cloudflare Turnstile challenge requires manual verification');
+                            }
                         } else {
                             log.info('Cloudflare challenge resolved!');
                         }
                     } catch (e) {
                         if (e.message.includes('Turnstile') || e.message.includes('PerimeterX')) throw e;
-                        log.warning('Cloudflare challenge did not resolve in time. Retrying...');
+                        log.warning('Cloudflare challenge did not resolve in time. Waiting for manual solve...');
                         await saveDebugInfo(page, `${statusCode}-challenge-timeout`);
-                        if (session) session.markBad();
-                        throw new Error('Cloudflare challenge timeout');
+                        const manualSolved = await waitForManualSolve(page);
+                        if (!manualSolved) {
+                            if (session) session.markBad();
+                            throw new Error('Cloudflare challenge timeout');
+                        }
                     }
                 } else {
                     log.warning('Received 403 without recognized challenge page. Marking session as bad.');
