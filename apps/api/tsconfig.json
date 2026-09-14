@@ -1,0 +1,16 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        "composite": true,
+        // shared/ and database/ export their .ts source directly, so those
+        // files are checked as part of this program. shared's CrawlError
+        // declares parameter property `cause`, which trips noImplicitOverride
+        // against ES2022's Error.cause. shared/ is frozen (not fixable from
+        // here) — same workaround as packages/database.
+        "noImplicitOverride": false,
+        "types": ["node"]
+    },
+    "include": ["src"]
+}

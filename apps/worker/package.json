@@ -1,0 +1,32 @@
+{
+    "name": "@sahibindenbot/worker",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "BullMQ crawl executor + cron scheduler + stale-run sweeper. The only process that opens browsers and writes crawl results.",
+    "exports": {
+        ".": "./src/index.ts",
+        "./queue-admin": "./src/queue-admin.ts",
+        "./scheduler": "./src/scheduler.ts",
+        "./sweeper": "./src/sweeper.ts"
+    },
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@sahibindenbot/database": "workspace:*",
+        "@sahibindenbot/scraper-engine": "workspace:*",
+        "@sahibindenbot/shared": "workspace:*",
+        "bullmq": "^5.0.0",
+        "croner": "^9.0.0",
+        "dotenv": "^16.4.5",
+        "ioredis": "^5.4.0",
+        "pino": "^9.0.0"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.0",
+        "vitest": "^3.0.0"
+    }
+}

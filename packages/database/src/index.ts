@@ -25,6 +25,9 @@ export type { CategorySnapshot, DetailSellerSnapshot, DetailSnapshot } from './r
 export { PrismaListingRepository } from './repositories/prisma-listing-repository.js';
 export { PrismaRunRepository } from './repositories/prisma-run-repository.js';
 export { PrismaScanRepository } from './repositories/prisma-scan-repository.js';
+export { PrismaProxyProfileRepository } from './repositories/prisma-proxy-profile-repository.js';
+export { PrismaCookieProfileRepository } from './repositories/prisma-cookie-profile-repository.js';
+export { PrismaSessionPolicyRepository } from './repositories/prisma-session-policy-repository.js';
 export { PrismaOutputRepository } from './adapters/prisma-output-repository.js';
 export { createDatabaseClient } from './client.js';
 export type { DatabaseClient, DatabaseRepositories } from './client.js';

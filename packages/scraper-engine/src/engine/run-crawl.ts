@@ -246,10 +246,15 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
         requestHandlerTimeoutSecs,
 
         useSessionPool: true,
-        persistCookiesPerSession: true,
+        // SessionPolicy (ARCHITECTURE.md §4) arrives via CrawlDeps; absent →
+        // the historical defaults (pool 10, maxUsageCount 50, persist true).
+        // The DB model's proxyAffinity / retireOnNetworkFailures /
+        // failureThreshold fields are consumed by the WORKER layer (proxy
+        // health + quarantine + retirement), never by the engine.
+        persistCookiesPerSession: deps.sessionPolicy?.persistCookiesPerSession ?? true,
         sessionPoolOptions: {
-            maxPoolSize: 10,
-            sessionOptions: { maxUsageCount: 50 },
+            maxPoolSize: deps.sessionPolicy?.poolSize ?? 10,
+            sessionOptions: { maxUsageCount: deps.sessionPolicy?.maxUsageCount ?? 50 },
         },
 
         browserPoolOptions: { retireBrowserAfterPageCount: 20 },

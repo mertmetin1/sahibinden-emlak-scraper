@@ -6,6 +6,8 @@
         { "path": "packages/parser-sahibinden" },
         { "path": "packages/scraper-engine" },
         { "path": "packages/database" },
-        { "path": "apps/cli" }
+        { "path": "apps/cli" },
+        { "path": "apps/api" },
+        { "path": "apps/worker" }
     ]
 }

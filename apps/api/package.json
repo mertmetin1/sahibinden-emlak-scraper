@@ -1,0 +1,28 @@
+{
+    "name": "@sahibindenbot/api",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Fastify REST API — scan CRUD, run control (BullMQ producer), proxy/cookie/session-profile management.",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@fastify/cors": "^11.1.0",
+        "@sahibindenbot/config": "workspace:*",
+        "@sahibindenbot/database": "workspace:*",
+        "@sahibindenbot/shared": "workspace:*",
+        "bullmq": "^5.61.2",
+        "croner": "^9.0.0",
+        "dotenv": "^16.6.1",
+        "fastify": "^5.6.1",
+        "fastify-plugin": "^5.1.0",
+        "ioredis": "^5.8.1",
+        "zod": "^3.23.8"
+    }
+}

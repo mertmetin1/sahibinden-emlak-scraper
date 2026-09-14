@@ -15,7 +15,7 @@
 export { runCrawl, assertAllowedDomain } from './engine/run-crawl.js';
 
 // Engine-local types (shared package is frozen this phase)
-export type { CrawlDeps, ChallengeKind } from './types.js';
+export type { CrawlDeps, ChallengeKind, SessionPolicyConfig } from './types.js';
 
 // Parser — owned by @sahibindenbot/parser-sahibinden, re-exported for
 // backward compatibility with existing consumers.
@@ -59,5 +59,20 @@ export {
 // Local adapters (replace Actor.* services)
 export { JsonFileOutputRepository } from './adapters/json-output.js';
 export { FsDebugArtifactStore } from './adapters/fs-debug-store.js';
-export { StaticProxyProvider, NullProxyProvider, redactProxyUrl } from './adapters/proxy.js';
+export {
+    StaticProxyProvider,
+    NullProxyProvider,
+    ProfileProxyProvider,
+    redactProxyUrl,
+    buildProxyUrl,
+    describeEndpoint,
+    normalizeProxyProtocol,
+} from './adapters/proxy.js';
+export type { ProxyEndpointInput, ProxyRotationStrategy } from './adapters/proxy.js';
+export { ProxyHealthChecker, classifyProxyError } from './adapters/proxy-health.js';
+export type { ProxyCheckResult, ProxyCheckErrorKind, CheckEndpointOptions } from './adapters/proxy-health.js';
 export { FileSessionProvider, StaticSessionProvider, normalizeCookieExport } from './adapters/session.js';
+
+// ScanDefinition snapshot → CrawlConfig mapping (Phase 4 worker wiring)
+export { crawlConfigFromSnapshot, SNAPSHOT_DEFAULTS } from './engine/config-from-snapshot.js';
+export type { ScanDefinitionSnapshot } from './engine/config-from-snapshot.js';

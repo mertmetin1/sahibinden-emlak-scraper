@@ -12,6 +12,26 @@ import type {
     SessionProvider,
 } from '@sahibindenbot/shared';
 
+/**
+ * Session-pool policy — the engine-consumed subset of the SessionPolicy DB
+ * model (ARCHITECTURE.md §4). When present on CrawlDeps, runCrawl derives
+ * `sessionPoolOptions` / `persistCookiesPerSession` from it; when absent,
+ * the engine defaults apply (pool 10, maxUsageCount 50, persist true).
+ *
+ * NOTE: the model's `proxyAffinity`, `retireOnNetworkFailures` and
+ * `failureThreshold` fields are consumed by the WORKER layer (proxy health,
+ * quarantine, session retirement orchestration) — the engine deliberately
+ * ignores them.
+ */
+export interface SessionPolicyConfig {
+    /** Crawlee sessionPoolOptions.maxPoolSize. */
+    poolSize: number;
+    /** Crawlee sessionOptions.maxUsageCount — session retires after N uses. */
+    maxUsageCount: number;
+    /** Crawlee persistCookiesPerSession. */
+    persistCookiesPerSession: boolean;
+}
+
 /** Dependencies injected into `runCrawl` — the local replacements for `Actor.*`. */
 export interface CrawlDeps {
     /** Batch sink for parsed listings (replaces `Actor.pushData`). */
@@ -28,6 +48,8 @@ export interface CrawlDeps {
     events: EventSink;
     /** Cooperative cancellation; checked between category pages. */
     cancellation?: CancellationToken;
+    /** Optional session-pool policy; engine defaults apply when absent. */
+    sessionPolicy?: SessionPolicyConfig;
 }
 
 /**

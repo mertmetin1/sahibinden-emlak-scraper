@@ -290,6 +290,26 @@ export interface CancellationToken {
 }
 
 // ---------------------------------------------------------------------------
+// Queue contracts (Phase 4) — Postgres is run-state truth; BullMQ is transport
+// ---------------------------------------------------------------------------
+
+/** BullMQ crawl job payload. The run row (with configurationSnapshot) is created
+ *  BEFORE enqueue; the worker rehydrates from the DB — the job carries only the id. */
+export interface CrawlJobData {
+    runId: string;
+}
+
+export const CRAWL_QUEUE = 'crawl-queue';
+export const MAINTENANCE_QUEUE = 'maintenance-queue';
+
+/** Redis key/channel helpers (single source for both api and worker). */
+export const RedisKeys = {
+    cancelKey: (runId: string) => `sahbot:cancel:${runId}`,
+    scanLockKey: (scanDefinitionId: string) => `sahbot:lock:scan:${scanDefinitionId}`,
+    runEventsChannel: (runId: string) => `run-events:${runId}`,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Result
 // ---------------------------------------------------------------------------
 
