@@ -1,0 +1,19 @@
+{
+    "name": "@sahibindenbot/scraper-engine",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Local-first Crawlee/Puppeteer crawl runtime for sahibinden-bot. No Apify, no stealth, no automated challenge solving (ADR-0002).",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@sahibindenbot/shared": "workspace:*",
+        "crawlee": "^3.13.0",
+        "puppeteer": "^24.0.0"
+    }
+}

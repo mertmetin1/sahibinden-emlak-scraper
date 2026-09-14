@@ -12,3 +12,6 @@ sahibinden-emlak-scraper-plan.md
 .env
 .env.*
 !.env.example
+# Build outputs
+dist/
+*.tsbuildinfo

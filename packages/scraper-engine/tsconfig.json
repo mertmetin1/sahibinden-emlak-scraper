@@ -1,0 +1,19 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        // DOM lib is required: extractCategoryRawInPage() is serialized by
+        // page.evaluate() and executed inside the browser, where it touches
+        // document/querySelector/innerText. It never runs in Node.
+        "lib": ["ES2022", "DOM"],
+        // shared/ exports its .ts source directly, so its files are checked as
+        // part of this program. shared's CrawlError declares parameter property
+        // `cause`, which trips noImplicitOverride against ES2022's Error.cause.
+        // shared/ is frozen this phase (not fixable from here), and this package
+        // declares no overriding parameter properties of its own — so the check
+        // is disabled for this project only.
+        "noImplicitOverride": false
+    },
+    "include": ["src"]
+}

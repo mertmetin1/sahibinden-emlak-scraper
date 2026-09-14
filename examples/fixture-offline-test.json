@@ -1,0 +1,20 @@
+{
+    "name": "fixture-offline-test",
+    "startUrls": [
+        "http://127.0.0.1:39393/satilik/adana-seyhan?sorting=date_desc&pagingSize=50"
+    ],
+    "maxItems": 50,
+    "maxPages": 1,
+    "maxConcurrency": 1,
+    "delayMinMs": 10,
+    "delayMaxMs": 50,
+    "browser": {
+        "mode": "managed",
+        "headless": true
+    },
+    "sessionCookiesFile": null,
+    "allowedDomains": ["127.0.0.1"],
+    "outputDir": "./storage/datasets",
+    "debugMode": false,
+    "humanInTheLoop": false
+}

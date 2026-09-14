@@ -1,0 +1,9 @@
+{
+    "files": [],
+    "references": [
+        { "path": "packages/shared" },
+        { "path": "packages/config" },
+        { "path": "packages/scraper-engine" },
+        { "path": "apps/cli" }
+    ]
+}

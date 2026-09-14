@@ -1,0 +1,10 @@
+packages:
+    - 'apps/*'
+    - 'packages/*'
+
+# Chrome is installed locally; puppeteer's browser download is unnecessary.
+# esbuild's binary arrives via optional platform deps; postinstall not needed.
+ignoredBuiltDependencies:
+    - esbuild
+    - puppeteer
+strictDepBuilds: false
