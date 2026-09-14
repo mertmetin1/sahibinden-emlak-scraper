@@ -12,30 +12,21 @@
  *
  * Selectors and fallback chain are ported 1:1 from upstream `src/main.js`
  * (commit a14740c, lines 652-682) — see docs/BASELINE_CONTRACT.md §1.
+ * The canonical home of the selector constants is ./selectors/index.js
+ * (versioned registry); they are re-exported here for compatibility.
+ *
+ * MOVED from `@sahibindenbot/scraper-engine` (Phase 2) — behavior is EXACTLY
+ * preserved; the engine re-exports these symbols for its existing consumers.
  */
 import type { CategoryListing } from '@sahibindenbot/shared';
-import { extractCurrency, extractListingId, formatPrice, normalizeText } from '../utils.js';
+import { extractCurrency, extractListingId, formatPrice, normalizeText } from './utils.js';
+import {
+    CATEGORY_ROW_SELECTOR,
+    FALLBACK_ROW_SELECTORS,
+    NEXT_PAGE_SELECTOR,
+} from './selectors/index.js';
 
-/** Primary listing-row selector (upstream main.js:652). */
-export const CATEGORY_ROW_SELECTOR = 'tbody.searchResultsRowClass > tr.searchResultsItem';
-
-/**
- * Fallback row selectors, tried in order, first non-empty wins
- * (upstream main.js:676-682). `[data-id]` is intentionally broad upstream;
- * preserved for parity.
- */
-export const FALLBACK_ROW_SELECTORS: readonly string[] = [
-    'table.searchResultsTable tr.searchResultsItem',
-    '.searchResultsRowClass .searchResultsItem',
-    'tr.searchResultsItem',
-    '.classified-list-item',
-    '[data-id]',
-    '.searchResults .result-item',
-    'table tr[data-id]',
-];
-
-/** Next-page link ("Sonraki" = Turkish "Next"); `.passive` means disabled. */
-export const NEXT_PAGE_SELECTOR = 'a.prevNextBut[title="Sonraki"]:not(.passive)';
+export { CATEGORY_ROW_SELECTOR, FALLBACK_ROW_SELECTORS, NEXT_PAGE_SELECTOR };
 
 /**
  * Raw per-row data as scraped inside the browser, before normalization.
@@ -72,7 +63,8 @@ export interface RawCategoryRow {
  */
 export function extractCategoryRawInPage(rowSelector: string): RawCategoryRow[] {
     // Field selectors inlined (upstream main.js:653-658) — module constants are
-    // unreachable after page.evaluate serialization.
+    // unreachable after page.evaluate serialization. The versioned registry
+    // (selectors/index.ts) documents the same selectors with evidence.
     const TITLE_LINK = 'td.searchResultsTitleValue a.classifiedTitle';
     const PRICE = 'td.searchResultsPriceValue span';
     const PRICE_PER_SQM = 'td.searchResultsPriceValue:nth-of-type(2)';

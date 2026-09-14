@@ -12,6 +12,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@sahibindenbot/parser-sahibinden": "workspace:*",
         "@sahibindenbot/shared": "workspace:*",
         "crawlee": "^3.13.0",
         "puppeteer": "^24.0.0"

@@ -1,0 +1,21 @@
+{
+    "name": "adana-detail-test",
+    "startUrls": [
+        "https://www.sahibinden.com/satilik/adana-seyhan?sorting=date_desc&pagingSize=50"
+    ],
+    "maxItems": 3,
+    "maxPages": 1,
+    "includeDetails": true,
+    "maxConcurrency": 1,
+    "delayMinMs": 4000,
+    "delayMaxMs": 7000,
+    "browser": {
+        "mode": "cdp",
+        "cdpUrl": "http://127.0.0.1:9222"
+    },
+    "sessionCookiesFile": "./storage/session-cookies.json",
+    "allowedDomains": ["sahibinden.com", "www.sahibinden.com"],
+    "outputDir": "./storage/datasets",
+    "debugMode": false,
+    "humanInTheLoop": true
+}

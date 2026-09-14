@@ -3,6 +3,7 @@
     "references": [
         { "path": "packages/shared" },
         { "path": "packages/config" },
+        { "path": "packages/parser-sahibinden" },
         { "path": "packages/scraper-engine" },
         { "path": "apps/cli" }
     ]

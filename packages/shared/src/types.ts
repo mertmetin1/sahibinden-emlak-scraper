@@ -48,6 +48,8 @@ export interface CrawlConfig {
     maxItems: number | null;
     /** Hard cap on category pages. null = follow pagination to the end. */
     maxPages: number | null;
+    /** When true, every discovered listing URL is enqueued as a DETAIL request. */
+    includeDetails: boolean;
     maxConcurrency: number;
     navigationTimeoutSeconds: number;
     requestHandlerTimeoutSeconds: number;
@@ -99,6 +101,91 @@ export interface CategoryListing {
 }
 
 // ---------------------------------------------------------------------------
+// Detail pages — normalized ListingDetail (Phase 2)
+// ---------------------------------------------------------------------------
+
+export type SellerType = 'OWNER' | 'REAL_ESTATE_OFFICE' | 'CONSTRUCTION_COMPANY' | 'OTHER' | 'UNKNOWN';
+
+export interface ListingImage {
+    url: string;
+    position: number;
+    isPrimary: boolean;
+}
+
+/**
+ * Normalized detail-page record. Raw Turkish attribute values are preserved
+ * as-is (lossless); `attributesRaw` keeps EVERY label/value pair so unknown
+ * future fields are never lost.
+ */
+export interface ListingDetail {
+    // identity & source
+    listingId: string | null;
+    canonicalUrl: string;
+    source: string; // 'sahibinden.com'
+    sourceUrl: string; // detail page URL
+    scrapedAt: string;
+    /** Category-row discovery data, carried through when the detail was reached via a category. */
+    category?: CategoryListing;
+    // core
+    title: string;
+    description: string;
+    price: number | null;
+    currency: string;
+    priceRaw: string | null;
+    pricePerSquareMeter: number | null;
+    // classification
+    listingType: 'SALE' | 'RENT' | 'UNKNOWN';
+    propertyCategory: string | null;
+    propertySubtype: string | null;
+    // property attributes (normalized, raw Turkish values preserved)
+    grossAreaM2: number | null;
+    netAreaM2: number | null;
+    rooms: string | null;
+    buildingAge: string | null;
+    floor: string | null;
+    totalFloors: string | null;
+    heating: string | null;
+    bathroomCount: string | null;
+    balcony: string | null;
+    furnished: string | null;
+    usageStatus: string | null;
+    insideSite: string | null;
+    siteName: string | null;
+    dues: string | null;
+    deposit: string | null;
+    deedStatus: string | null;
+    creditEligible: string | null;
+    exchangeEligible: string | null;
+    // location
+    province: string | null;
+    district: string | null;
+    neighborhood: string | null;
+    locationRaw: string;
+    // dates (ISO when parseable + raw preserved)
+    listingDate: string | null;
+    listingDateRaw: string | null;
+    updatedDate: string | null;
+    updatedDateRaw: string | null;
+    // seller
+    sellerType: SellerType;
+    /** What drove the classification (selector/attribute evidence). Null when UNKNOWN. */
+    sellerTypeEvidence: string | null;
+    sellerDisplayName: string | null;
+    officeName: string | null;
+    sellerProfileUrl: string | null;
+    /** Only when already rendered in the normally authorized DOM. Never via reveal automation. */
+    publicContactPhone: string | null;
+    // media
+    images: ListingImage[];
+    videoUrl: string | null;
+    virtualTourUrl: string | null;
+    // raw survival
+    attributesRaw: Record<string, string>;
+    /** True when the page is an unavailable/removed listing notice. */
+    unavailable: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Errors — typed classification (replaces upstream's stringly errors)
 // ---------------------------------------------------------------------------
 
@@ -135,6 +222,9 @@ export type CrawlEventType =
     | 'CATEGORY_STARTED'
     | 'CATEGORY_PARSED'
     | 'LISTING_DISCOVERED'
+    | 'DETAIL_STARTED'
+    | 'DETAIL_PARSED'
+    | 'DETAIL_UNAVAILABLE'
     | 'REQUEST_RETRY'
     | 'REQUEST_FAILED'
     | 'SESSION_RETIRED'
@@ -159,6 +249,8 @@ export interface CrawlEvent {
 /** Replaces Actor.pushData — batch sink for parsed listings. */
 export interface OutputRepository {
     upsertListings(items: CategoryListing[]): Promise<void>;
+    /** Detail records (category data already merged by the engine). */
+    upsertDetails(items: ListingDetail[]): Promise<void>;
     finalize(): Promise<void>;
 }
 
@@ -213,4 +305,8 @@ export interface CrawlResult {
     finishedAt: string;
     durationMs: number;
     errors: Array<{ code: CrawlErrorCode; message: string; url?: string }>;
+    /** Detail pages handled (parsed or confirmed unavailable). Present only when includeDetails. */
+    detailPagesVisited?: number;
+    /** Detail records written to the output repository. Present only when includeDetails. */
+    detailsWritten?: number;
 }

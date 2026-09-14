@@ -2,9 +2,13 @@
  * @sahibindenbot/scraper-engine — public API.
  *
  * Local-first crawl runtime: Crawlee PuppeteerCrawler wiring, browser
- * acquisition (managed/CDP), category parsing, human-in-the-loop challenge
- * handling, typed errors, structured events. No Apify. No stealth. No
- * automated challenge solving (ADR-0002).
+ * acquisition (managed/CDP), category + detail crawling, human-in-the-loop
+ * challenge handling, typed errors, structured events. No Apify. No stealth.
+ * No automated challenge solving (ADR-0002).
+ *
+ * Parsing itself is owned by `@sahibindenbot/parser-sahibinden` (Phase 2);
+ * the parser symbols are re-exported here so Phase-1 consumers (tests/, CLI)
+ * keep working unchanged.
  */
 
 // Entry point + SSRF guard
@@ -13,18 +17,30 @@ export { runCrawl, assertAllowedDomain } from './engine/run-crawl.js';
 // Engine-local types (shared package is frozen this phase)
 export type { CrawlDeps, ChallengeKind } from './types.js';
 
-// Parser — split for fixture tests (in-page extractor + pure normalizer)
+// Parser — owned by @sahibindenbot/parser-sahibinden, re-exported for
+// backward compatibility with existing consumers.
 export {
     CATEGORY_ROW_SELECTOR,
     FALLBACK_ROW_SELECTORS,
     NEXT_PAGE_SELECTOR,
+    DETAIL_READY_SELECTOR,
     extractCategoryRawInPage,
     normalizeCategoryItems,
-} from './parser/category-page.js';
-export type { RawCategoryRow } from './parser/category-page.js';
+    extractDetailRawInPage,
+    normalizeDetail,
+    isUnavailableDetailHtml,
+    formatPrice,
+    extractCurrency,
+    normalizeText,
+    extractListingId,
+} from '@sahibindenbot/parser-sahibinden';
+export type { RawCategoryRow, RawDetailPage } from '@sahibindenbot/parser-sahibinden';
 
-// Utils — exact upstream ports
-export { formatPrice, extractCurrency, normalizeText, extractListingId, randomDelay } from './utils.js';
+// Explicit request-label routing
+export { routeLabel, type RequestLabel } from './engine/router.js';
+
+// Engine-local utils
+export { randomDelay } from './utils.js';
 
 // Challenge detection (never solving)
 export { isChallengedPage, isPxHoldChallenge, detectChallengeKind } from './engine/challenge.js';

@@ -1,0 +1,20 @@
+{
+    "name": "@sahibindenbot/parser-sahibinden",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Sahibinden.com HTML parsers: category + detail pages. Versioned selector registry, CSS-obfuscation resolution, evidence-based seller classification. Pure/deterministic node-side normalizers; serializable in-browser extractors. No Apify/Crawlee imports (puppeteer is a test-only devDependency).",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@sahibindenbot/shared": "workspace:*"
+    },
+    "devDependencies": {
+        "puppeteer": "^24.0.0"
+    }
+}

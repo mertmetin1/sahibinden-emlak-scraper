@@ -33,6 +33,7 @@ export const crawlConfigSchema = z.object({
     startUrls: z.array(urlString).min(1),
     maxItems: z.number().int().min(1).nullable().default(null),
     maxPages: z.number().int().min(1).nullable().default(null),
+    includeDetails: z.boolean().default(false),
     maxConcurrency: z.number().int().min(1).max(10).default(3),
     navigationTimeoutSeconds: z.number().int().min(5).max(300).default(90),
     requestHandlerTimeoutSeconds: z.number().int().min(30).max(600).default(180),

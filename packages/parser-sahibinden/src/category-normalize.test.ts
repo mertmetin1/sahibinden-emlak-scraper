@@ -1,6 +1,8 @@
 /**
  * Pins `normalizeCategoryItems` against the 13-field baseline contract
  * (docs/BASELINE_CONTRACT.md §1) using synthetic RawCategoryRow fixtures.
+ *
+ * MOVED from @sahibindenbot/scraper-engine (Phase 2) — unchanged behavior.
  */
 import { describe, expect, it } from 'vitest';
 import { normalizeCategoryItems, type RawCategoryRow } from './category-page.js';

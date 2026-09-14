@@ -24,28 +24,37 @@ import {
 import type { Page } from 'puppeteer';
 import {
     CrawlError,
+    type CategoryListing,
     type CrawlConfig,
     type CrawlErrorCode,
     type CrawlEventType,
     type CrawlResult,
     type CrawlRunStatus,
+    type ListingDetail,
 } from '@sahibindenbot/shared';
-import { createBrowserProvider } from '../browser/browser-provider.js';
 import {
     CATEGORY_ROW_SELECTOR,
+    DETAIL_READY_SELECTOR,
     FALLBACK_ROW_SELECTORS,
     NEXT_PAGE_SELECTOR,
     extractCategoryRawInPage,
+    extractDetailRawInPage,
+    extractListingId,
+    isUnavailableDetailHtml,
     normalizeCategoryItems,
-} from '../parser/category-page.js';
+    normalizeDetail,
+} from '@sahibindenbot/parser-sahibinden';
+import { createBrowserProvider } from '../browser/browser-provider.js';
 import { randomDelay } from '../utils.js';
 import type { ChallengeKind, CrawlDeps } from '../types.js';
 import { detectChallengeKind, isChallengedPage, isPxHoldChallenge } from './challenge.js';
 import { crawlError, classifyError, classifyErrorMessages } from './errors.js';
+import { routeLabel } from './router.js';
 
 const BLOCKED_STATUSES = new Set([403, 503, 429]);
 const TLOADING_WAIT_MS = 30_000;
 const ROW_SELECTOR_WAIT_MS = 15_000;
+const DETAIL_READY_WAIT_MS = 15_000;
 const HUMAN_POLL_MS = 3_000;
 
 /**
@@ -80,7 +89,11 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
     let itemsDiscovered = 0;
     let itemsWritten = 0;
     let categoryPagesVisited = 0;
+    let detailPagesVisited = 0;
+    let detailsWritten = 0;
     let failedRequests = 0;
+    /** Per-run dedup for DETAIL enqueues (listing id, falling back to URL). */
+    const seenDetailKeys = new Set<string>();
 
     const emit = (type: CrawlEventType, data?: Record<string, unknown>): void => {
         try {
@@ -103,6 +116,8 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
             finishedAt: finishedAt.toISOString(),
             durationMs: finishedAt.getTime() - startedAt.getTime(),
             errors,
+            // Additive optional counters — only meaningful for detail runs.
+            ...(config.includeDetails ? { detailPagesVisited, detailsWritten } : {}),
         };
     };
 
@@ -218,7 +233,14 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
         // null → undefined: Crawlee's option validation rejects explicit null.
         proxyConfiguration: proxyConfiguration ?? undefined,
         maxConcurrency: config.maxConcurrency,
-        maxRequestsPerCrawl: config.maxItems ? config.maxItems * 3 : 1000, // upstream heuristic
+        // With details, every category page can spawn up to a pageful of
+        // DETAIL requests: pages + items + slack. Otherwise keep the
+        // upstream heuristic (maxItems * 3, else 1000).
+        maxRequestsPerCrawl: config.includeDetails
+            ? (config.maxPages ?? 100) + (config.maxItems ?? 1000) + 10
+            : config.maxItems
+              ? config.maxItems * 3
+              : 1000,
         maxRequestRetries: config.maxRequestRetries,
         navigationTimeoutSecs: config.navigationTimeoutSeconds,
         requestHandlerTimeoutSecs,
@@ -341,25 +363,25 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
         ],
 
         requestHandler: async ctx => {
-            const { request } = ctx;
-            const label = typeof request.userData?.label === 'string' ? request.userData.label : 'CATEGORY';
-
-            // Explicit label routing. DETAIL lands in Phase 3 — the upstream
-            // DETAIL route was vestigial (no handler existed); we fail loudly.
-            if (label === 'DETAIL') {
-                throw crawlError('UNSUPPORTED_LABEL', 'DETAIL handling lands in Phase 3');
-            }
-            if (label !== 'CATEGORY') {
-                throw crawlError('UNSUPPORTED_LABEL', `Unsupported request label: ${label}`);
-            }
-
+            // Cooperative cancellation between requests (category AND detail).
             if (deps.cancellation?.isCancelled) {
                 await crawler.autoscaledPool?.abort();
                 return;
             }
 
+            // Explicit label routing — throws UNSUPPORTED_LABEL for anything
+            // but 'CATEGORY'/'DETAIL'. A DETAIL request never reaches
+            // category parsing logic and vice versa.
+            const label = routeLabel(ctx.request.userData?.label);
+
+            // Politeness pacing applies to every request type.
             await randomDelay(config.delayMinMs, config.delayMaxMs);
-            await handleCategoryPage(ctx);
+
+            if (label === 'DETAIL') {
+                await handleDetailPage(ctx);
+            } else {
+                await handleCategoryPage(ctx);
+            }
         },
 
         // Fires on every failed attempt (before retry) — drives REQUEST_RETRY.
@@ -458,7 +480,34 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
             return;
         }
 
-        // 5) Pagination: follow "Sonraki" until absent / maxPages / maxItems.
+        // 5) Detail enqueue (includeDetails): one DETAIL request per written
+        // listing. `batch` is already maxItems-capped, so details never exceed
+        // the cap; a per-run key set dedups repeats across pages; off-domain
+        // URLs are skipped with a warning (same SSRF policy as pagination).
+        if (config.includeDetails && batch.length > 0) {
+            const detailRequests: Array<{
+                url: string;
+                userData: { label: 'DETAIL'; listingData: CategoryListing };
+            }> = [];
+            for (const item of batch) {
+                const dedupKey = item.id ?? item.url;
+                if (seenDetailKeys.has(dedupKey)) continue;
+                try {
+                    assertAllowedDomain(item.url, config.allowedDomains);
+                } catch {
+                    logger.warn('Skipping off-domain detail URL', { url: item.url });
+                    continue;
+                }
+                seenDetailKeys.add(dedupKey);
+                detailRequests.push({ url: item.url, userData: { label: 'DETAIL', listingData: item } });
+            }
+            if (detailRequests.length > 0) {
+                await crawler.addRequests(detailRequests);
+                logger.info(`Enqueued ${detailRequests.length} detail requests`, { url: request.url });
+            }
+        }
+
+        // 6) Pagination: follow "Sonraki" until absent / maxPages / maxItems.
         const itemsAllowMore = config.maxItems === null || itemsWritten < config.maxItems;
         const pagesAllowMore = config.maxPages === null || categoryPagesVisited < config.maxPages;
         if (itemsAllowMore && pagesAllowMore) {
@@ -483,11 +532,76 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
             }
         }
 
-        // 6) maxItems reached → stop scheduling (public API, kept from upstream).
-        if (config.maxItems !== null && itemsWritten >= config.maxItems) {
+        // 7) maxItems reached → stop scheduling (public API, kept from
+        // upstream). With includeDetails the pool must stay alive to drain the
+        // enqueued DETAIL requests — the pagination gate above already stops
+        // new category pages, so the run ends naturally when the queue empties.
+        if (!config.includeDetails && config.maxItems !== null && itemsWritten >= config.maxItems) {
             logger.info(`maxItems (${config.maxItems}) reached — stopping crawl.`);
             await crawler.autoscaledPool?.abort();
         }
+    };
+
+    /**
+     * DETAIL handler — exactly one detail page per request. NEVER runs
+     * category parsing logic. A removed/unavailable listing is a normal
+     * outcome (DETAIL_UNAVAILABLE), not an error; a broken parser on a
+     * present listing fails only this request (INVALID_PAGE/PARSER_CHANGED),
+     * never the run.
+     */
+    const handleDetailPage = async (ctx: PuppeteerCrawlingContext): Promise<void> => {
+        const { page, request } = ctx;
+        const listingData = request.userData?.listingData as CategoryListing | undefined;
+        const listingId = listingData?.id ?? extractListingId(request.url);
+        emit('DETAIL_STARTED', { url: request.url, listingId });
+
+        // 1) Wait for the detail container; on timeout decide between a
+        // removed listing (normal) and a parser break (error). The
+        // unavailable check runs on the matched path too (defense in depth).
+        let readySelectorFound = true;
+        try {
+            await page.waitForSelector(DETAIL_READY_SELECTOR, { timeout: DETAIL_READY_WAIT_MS });
+        } catch {
+            readySelectorFound = false;
+        }
+        const html = await page.content().catch(() => '');
+        if (isUnavailableDetailHtml(html)) {
+            detailPagesVisited++;
+            logger.info('Detail page unavailable (removed listing)', { url: request.url, listingId });
+            emit('DETAIL_UNAVAILABLE', { url: request.url, listingId });
+            return; // NOT an error — nothing recorded.
+        }
+        if (!readySelectorFound) {
+            await saveDebugArtifacts(page, 'detail-ready-timeout');
+            throw crawlError(
+                'PARSER_CHANGED',
+                `Detail ready selector not found within ${DETAIL_READY_WAIT_MS}ms: ${request.url}`,
+            );
+        }
+
+        // 2) Extract in-page → normalize node-side. A throwing normalizer
+        // fails only this request — one bad detail must never kill the run.
+        const raw = await page.evaluate(extractDetailRawInPage);
+        let detail: ListingDetail;
+        try {
+            detail = normalizeDetail(raw, { url: request.url, category: listingData });
+        } catch (err) {
+            await saveDebugArtifacts(page, 'detail-normalize-failed');
+            throw crawlError(
+                'INVALID_PAGE',
+                `normalizeDetail failed for ${request.url}: ${(err as Error).message}`,
+                err,
+            );
+        }
+
+        // 3) One record per detail page (repo dedups by listingId).
+        await deps.output.upsertDetails([detail]);
+        detailPagesVisited++;
+        detailsWritten++;
+        logger.info(`Parsed detail ${detail.listingId ?? request.url}. Total details: ${detailsWritten}`, {
+            url: request.url,
+        });
+        emit('DETAIL_PARSED', { url: request.url, listingId: detail.listingId, sellerType: detail.sellerType });
     };
 
     let result: CrawlResult;
@@ -534,6 +648,9 @@ function summarize(result: CrawlResult): Record<string, unknown> {
         categoryPagesVisited: result.categoryPagesVisited,
         failedRequests: result.failedRequests,
         durationMs: result.durationMs,
+        ...(result.detailPagesVisited !== undefined
+            ? { detailPagesVisited: result.detailPagesVisited, detailsWritten: result.detailsWritten ?? 0 }
+            : {}),
     };
 }
 
