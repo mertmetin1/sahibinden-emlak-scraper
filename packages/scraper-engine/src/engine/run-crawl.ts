@@ -15,9 +15,11 @@
  *   overrides, stealth plugin (see browser/browser-provider.ts).
  * `autoscaledPool.abort()` for maxItems/cancellation is kept (public API).
  */
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
     PuppeteerCrawler,
+    RequestQueue,
     type ProxyConfiguration,
     type PuppeteerCrawlingContext,
 } from 'crawlee';
@@ -169,6 +171,11 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
     // Human-in-the-loop only makes sense when a human can see the browser.
     const browserIsVisible = config.browser.mode === 'cdp' || config.browser.headless === false;
 
+    // Crawlee's default request queue is process-global and persists handled
+    // URLs on disk. A long-lived worker then treats the same start URL as
+    // already done (~500ms SUCCEEDED, 0 listings). Isolate every crawl.
+    const requestQueue = await RequestQueue.open(`run-${randomUUID()}`);
+
     // A human solve must fit inside the request handler timeout (upstream bug:
     // 180s handler timeout raced the 180s manual-solve window — audit §14.10).
     const requestHandlerTimeoutSecs = Math.max(
@@ -230,6 +237,7 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
     };
 
     const crawler = new PuppeteerCrawler({
+        requestQueue,
         // null → undefined: Crawlee's option validation rejects explicit null.
         proxyConfiguration: proxyConfiguration ?? undefined,
         maxConcurrency: config.maxConcurrency,
@@ -638,6 +646,11 @@ export async function runCrawl(config: CrawlConfig, deps: CrawlDeps): Promise<Cr
         result = buildResult(deps.cancellation?.isCancelled ? 'CANCELLED' : 'FAILED');
         emit('RUN_FAILED', { message, code });
     } finally {
+        try {
+            await requestQueue.drop();
+        } catch (err) {
+            logger.warn('Could not drop per-run request queue', { error: (err as Error).message });
+        }
         await finalizeOutput(deps, logger);
     }
 

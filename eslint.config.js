@@ -7,6 +7,7 @@ export default [
         ignores: [
             'node_modules/**',
             '**/dist/**',
+            '**/.next/**', // Next.js build output (generated .ts/.tsx)
             'storage/**',
             'fixtures/**',
             '.chrome-debug-profile/**',
@@ -17,7 +18,7 @@ export default [
     },
     js.configs.recommended,
     {
-        files: ['packages/**/*.ts', 'apps/**/*.ts', 'tests/**/*.ts'],
+        files: ['packages/**/*.ts', 'apps/**/*.ts', 'apps/**/*.tsx', 'tests/**/*.ts'],
         languageOptions: {
             parser: tsparser,
             parserOptions: { sourceType: 'module', ecmaVersion: 2022 },

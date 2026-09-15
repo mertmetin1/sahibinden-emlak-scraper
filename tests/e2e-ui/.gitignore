@@ -1,0 +1,2 @@
+# Playwright run artifacts (traces are kept only on failure)
+.results/

@@ -187,6 +187,8 @@ export interface ListingListRow extends ListingRecord {
     priceChanged: boolean;
     /** Percent change between the last two price rows, 2dp; null when < 2 rows. */
     latestPriceChangePercent: number | null;
+    /** Primary image URL when present (drives the UI thumbnail column). */
+    thumbnailUrl: string | null;
 }
 
 export interface ListingDetailRecord extends ListingRecord {

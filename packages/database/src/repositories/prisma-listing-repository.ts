@@ -622,6 +622,8 @@ export class PrismaListingRepository implements ListingRepository {
                     seller: true,
                     // last 2 price rows feed the derived fields — computed in JS, no raw SQL
                     priceHistory: { orderBy: { changedAt: 'desc' }, take: 2 },
+                    // primary image drives the UI thumbnail column
+                    images: { where: { isPrimary: true }, take: 1, select: { url: true } },
                 },
             }),
         ]);
@@ -634,6 +636,7 @@ export class PrismaListingRepository implements ListingRepository {
                     seller: row.seller !== null ? toSellerRecord(row.seller) : null,
                     priceChanged: computePriceChanged(row.priceHistory.length),
                     latestPriceChangePercent: computeLatestPriceChangePercent(historyPoints),
+                    thumbnailUrl: row.images[0]?.url ?? null,
                 };
             }),
             total,

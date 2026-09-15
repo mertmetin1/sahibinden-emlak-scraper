@@ -94,6 +94,21 @@ async function main(): Promise<void> {
             pricesChanged: batch.counts.priceChanged,
         });
 
+        // 3b. Journal events for the synthetic run so Run Detail shows a
+        // realistic log out of the box (only the worker writes events
+        // otherwise). Idempotent: skipped when the run already has events.
+        const existingEvents = await db.prisma.scanRunEvent.count({ where: { runId: run.id } });
+        if (existingEvents === 0) {
+            await db.prisma.scanRunEvent.createMany({
+                data: [
+                    { runId: run.id, type: 'RUN_STARTED', data: { startUrlCount: 1, browserMode: 'managed' } },
+                    { runId: run.id, type: 'CATEGORY_PARSED', data: { listingsFound: items.length, newListings: batch.counts.inserted } },
+                    { runId: run.id, type: 'RUN_COMPLETED', data: { status: 'SUCCEEDED' } },
+                ],
+            });
+            console.log('[seed] 3 journal events inserted for the demo run');
+        }
+
         const totalListings = await db.prisma.listing.count();
         console.log(
             `[seed] fixture rows: ${items.length} | ` +
