@@ -156,8 +156,103 @@ export const runListQuerySchema = z.object({
 });
 
 export const runDetailQuerySchema = z.object({
-    afterEventId: z.string().trim().min(1).optional(),
+    afterEventId: z
+        .string()
+        .trim()
+        .regex(/^\d+$/, 'must be a decimal ScanRunEvent id')
+        .optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Run events (replay endpoint + SSE stream)
+// ---------------------------------------------------------------------------
+
+export const runEventsQuerySchema = z.object({
+    /** Decimal ScanRunEvent id — only events with id > afterId are returned. */
+    afterId: z
+        .string()
+        .trim()
+        .regex(/^\d+$/, 'must be a decimal ScanRunEvent id')
+        .optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Listings
+// ---------------------------------------------------------------------------
+
+/** API-facing sort fields (whitelisted). `area` maps to grossAreaM2 at the repo boundary. */
+export const LISTING_SORT_FIELDS = ['price', 'firstSeenAt', 'lastSeenAt', 'title', 'area'] as const;
+export type ListingSortParam = (typeof LISTING_SORT_FIELDS)[number];
+
+export const SELLER_TYPES = ['OWNER', 'REAL_ESTATE_OFFICE', 'CONSTRUCTION_COMPANY', 'OTHER', 'UNKNOWN'] as const;
+export const LISTING_STATUSES = ['ACTIVE', 'STALE', 'REMOVED'] as const;
+
+/** Query-string boolean ('true'/'false' → boolean) — z.coerce.boolean() would map 'false' → true. */
+const queryBoolean = z.enum(['true', 'false']).transform((v) => v === 'true');
+
+/** Every listings filter composes at the DB level via ListingRepository.listWithDerived. */
+const listingFilterFields = {
+    search: z.string().trim().min(1).max(200).optional(),
+    province: z.string().trim().min(1).max(100).optional(),
+    district: z.string().trim().min(1).max(100).optional(),
+    neighborhood: z.string().trim().min(1).max(100).optional(),
+    sellerType: z.enum(SELLER_TYPES).optional(),
+    listingType: z.string().trim().min(1).max(50).optional(),
+    propertyCategory: z.string().trim().min(1).max(100).optional(),
+    priceMin: z.coerce.number().int().min(0).optional(),
+    priceMax: z.coerce.number().int().min(0).optional(),
+    /** m² filters apply to grossAreaM2 (site-advertised area). */
+    m2Min: z.coerce.number().int().min(0).optional(),
+    m2Max: z.coerce.number().int().min(0).optional(),
+    rooms: z.string().trim().min(1).max(20).optional(),
+    firstSeenFrom: z.coerce.date().optional(),
+    lastSeenBefore: z.coerce.date().optional(),
+    priceChanged: queryBoolean.optional(),
+    scanId: z.string().trim().min(1).optional(),
+    status: z.enum(LISTING_STATUSES).optional(),
+};
+
+export const listingListQuerySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    sort: z.enum(LISTING_SORT_FIELDS).default('lastSeenAt'),
+    order: z.enum(['asc', 'desc']).default('desc'),
+    ...listingFilterFields,
+});
+
+/** CSV export: same filters as the list, no pagination (streamed, capped server-side). */
+export const listingExportQuerySchema = z.object({
+    sort: z.enum(LISTING_SORT_FIELDS).default('lastSeenAt'),
+    order: z.enum(['asc', 'desc']).default('desc'),
+    ...listingFilterFields,
+});
+
+export type ListingListQuery = z.infer<typeof listingListQuerySchema>;
+export type ListingExportQuery = z.infer<typeof listingExportQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Editable AppSetting keys — settings are CODE-DEFINED, not free-form:
+ * every key has a typed consumer (UI default page size, CSV export row cap,
+ * worker scheduler toggle), so arbitrary keys would be silently dead config.
+ * PATCH rejects unknown keys with 400 VALIDATION_ERROR.
+ */
+export const EDITABLE_SETTING_KEYS = ['ui.defaultPageSize', 'export.maxRows', 'scheduler.enabled'] as const;
+export type EditableSettingKey = (typeof EDITABLE_SETTING_KEYS)[number];
+
+/** Per-key value validation (typed consumers demand typed values). */
+export const SETTING_VALUE_SCHEMAS: Record<EditableSettingKey, z.ZodType<number | boolean>> = {
+    'ui.defaultPageSize': z.number().int().min(1).max(100),
+    'export.maxRows': z.number().int().min(1).max(50_000),
+    'scheduler.enabled': z.boolean(),
+};
+
+export const settingsPatchSchema = z
+    .record(z.string(), z.unknown())
+    .refine((obj) => Object.keys(obj).length > 0, 'at least one setting key is required');
 
 // ---------------------------------------------------------------------------
 // Proxy profiles & endpoints

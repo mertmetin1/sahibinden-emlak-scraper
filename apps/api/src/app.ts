@@ -12,17 +12,22 @@ import cors from '@fastify/cors';
 import fp from 'fastify-plugin';
 import { Redis } from 'ioredis';
 import { ZodError } from 'zod';
-import { CrawlError, redactSecrets } from '@sahibindenbot/shared';
+import { CrawlError, RedisKeys, redactSecrets } from '@sahibindenbot/shared';
 import type { ApiEnv } from './env.js';
 import { ApiError, toValidationIssues } from './errors.js';
 import { RunControlService, type RunControlKeys } from './queue.js';
 import { prismaPlugin } from './plugins/prisma.js';
+import { openApiPlugin } from './plugins/openapi.js';
 import { healthRoutes } from './routes/health.js';
 import { scanRoutes } from './routes/scans.js';
 import { runRoutes } from './routes/runs.js';
+import { runEventRoutes } from './routes/run-events.js';
 import { proxyProfileRoutes } from './routes/proxy-profiles.js';
 import { cookieProfileRoutes } from './routes/cookie-profiles.js';
 import { sessionPolicyRoutes } from './routes/session-policies.js';
+import { dashboardRoutes } from './routes/dashboard.js';
+import { listingRoutes } from './routes/listings.js';
+import { settingsRoutes } from './routes/settings.js';
 
 /** Pino redact paths (defense in depth on top of call-site redactSecrets). */
 const LOG_REDACT_PATHS = [
@@ -55,6 +60,8 @@ export interface BuildAppOptions {
     queueName?: string;
     queuePrefix?: string;
     keys?: RunControlKeys;
+    /** SSE pub/sub channel builder (ADR-0004) — tests inject a sahtest-prefixed one. */
+    runEventsChannel?: (runId: string) => string;
 }
 
 declare module 'fastify' {
@@ -183,6 +190,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         return payload;
     });
 
+    // -- Route schemas are OpenAPI documentation ONLY --------------------------
+    // Routes validate with Zod inside handlers (parseWith) — that produces the
+    // uniform VALIDATION_ERROR shape and handles query-string coercion. The
+    // JSON schemas in route `schema` slots exist for @fastify/swagger spec
+    // generation, so the Fastify/AJV validator compiler is a no-op here.
+    // (No response schemas are attached — fast-json-stringify would silently
+    // drop undeclared fields.)
+    app.setValidatorCompiler(() => () => true);
+
     // -- Persistence + run control -------------------------------------------
     await app.register(prismaPlugin, { databaseUrl: env.DATABASE_URL, masterKey: env.APP_SECRET_KEY });
     await app.register(runControlPlugin, {
@@ -192,13 +208,23 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         keys: options.keys,
     });
 
+    // -- OpenAPI (before routes: swagger collects them via onRoute) -----------
+    await app.register(openApiPlugin);
+
     // -- Routes ---------------------------------------------------------------
     await app.register(healthRoutes);
     await app.register(scanRoutes);
     await app.register(runRoutes);
+    await app.register(runEventRoutes, {
+        redisUrl: env.REDIS_URL,
+        runEventsChannel: options.runEventsChannel ?? RedisKeys.runEventsChannel,
+    });
     await app.register(proxyProfileRoutes);
     await app.register(cookieProfileRoutes);
     await app.register(sessionPolicyRoutes);
+    await app.register(dashboardRoutes);
+    await app.register(listingRoutes);
+    await app.register(settingsRoutes);
 
     return app;
 }

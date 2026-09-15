@@ -9,6 +9,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import type { ProxyEndpointRecordDto, ProxyProfileDetailDto, ProxyProfileRecordDto } from '../types.js';
+import { routeDoc } from '../docs.js';
 import { notFound, parseWith } from '../errors.js';
 import {
     idParamSchema,
@@ -65,20 +66,40 @@ function serializeProfileDetail(profile: ProxyProfileDetailDto): Record<string, 
 
 export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
     // GET /api/proxy-profiles — summaries with endpoint counts + health breakdown.
-    app.get('/api/proxy-profiles', async () => {
+    app.get('/api/proxy-profiles', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'List proxy profiles',
+            description: 'Profile summaries with endpoint counts and per-health-status breakdown. Metadata only.',
+        }),
+    }, async () => {
         const rows = await app.proxyProfiles.listProfiles();
         return { rows, total: rows.length };
     });
 
     // POST /api/proxy-profiles
-    app.post('/api/proxy-profiles', async (request, reply) => {
+    app.post('/api/proxy-profiles', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Create a proxy profile',
+            description: 'strategy ROUND_ROBIN (Crawlee rotation) or SESSION_STICKY (session-consistent assignment).',
+            body: proxyProfileCreateSchema,
+        }),
+    }, async (request, reply) => {
         const body = parseWith(proxyProfileCreateSchema, request.body);
         const profile = await app.proxyProfiles.createProfile(body);
         return reply.code(201).send(serializeProfile(profile));
     });
 
     // GET /api/proxy-profiles/:id — profile + endpoints (credentials masked).
-    app.get('/api/proxy-profiles/:id', async (request) => {
+    app.get('/api/proxy-profiles/:id', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Proxy profile detail with endpoints',
+            description: 'Endpoints expose credentials as hasUsername/hasPassword booleans only — never values.',
+            params: idParamSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const profile = await app.proxyProfiles.getProfile(id);
         if (profile === null) throw notFound(`proxy profile ${id} not found`);
@@ -86,7 +107,14 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // PATCH /api/proxy-profiles/:id
-    app.patch('/api/proxy-profiles/:id', async (request) => {
+    app.patch('/api/proxy-profiles/:id', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Update a proxy profile',
+            params: idParamSchema,
+            body: proxyProfileUpdateSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const body = parseWith(proxyProfileUpdateSchema, request.body);
         const profile = await app.proxyProfiles.updateProfile(id, body);
@@ -94,14 +122,31 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // DELETE /api/proxy-profiles/:id — endpoints cascade.
-    app.delete('/api/proxy-profiles/:id', async (request, reply) => {
+    app.delete('/api/proxy-profiles/:id', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Delete a proxy profile',
+            description: 'Endpoints cascade; scans referencing the profile are detached (SetNull).',
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         await app.proxyProfiles.deleteProfile(id);
         return reply.code(204).send();
     });
 
     // POST /api/proxy-profiles/:id/endpoints — single endpoint add.
-    app.post('/api/proxy-profiles/:id/endpoints', async (request, reply) => {
+    app.post('/api/proxy-profiles/:id/endpoints', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Add a proxy endpoint',
+            description:
+                'username/password are write-only: encrypted (AES-256-GCM) before persist, never returned. ' +
+                'Responses carry hasUsername/hasPassword presence booleans.',
+            params: idParamSchema,
+            body: proxyEndpointCreateSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         const profile = await app.proxyProfiles.getProfile(id);
         if (profile === null) throw notFound(`proxy profile ${id} not found`);
@@ -117,7 +162,17 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
     // POST /api/proxy-profiles/:id/endpoints/bulk — { text } conventional
     // lines (protocol://user:pass@host:port, host:port:user:pass, ...).
     // Per-line failures are collected with MASKED content by the repository.
-    app.post('/api/proxy-profiles/:id/endpoints/bulk', async (request) => {
+    app.post('/api/proxy-profiles/:id/endpoints/bulk', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Bulk import proxy endpoints',
+            description:
+                'Accepts conventional line formats (protocol://user:pass@host:port, host:port:user:pass, …). ' +
+                'Per-line failures are collected with masked content.',
+            params: idParamSchema,
+            body: proxyBulkImportSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const body = parseWith(proxyBulkImportSchema, request.body);
         // importEndpoints throws (CrawlError) only when the profile is missing.
@@ -126,7 +181,15 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
 
     // PATCH /api/proxy-endpoints/:id — partial update; credentials tri-state
     // (omitted = keep, null = clear, string = re-encrypt & store).
-    app.patch('/api/proxy-endpoints/:id', async (request) => {
+    app.patch('/api/proxy-endpoints/:id', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Update a proxy endpoint',
+            description: 'Credentials are tri-state: omitted = keep, null = clear, string = re-encrypt & store.',
+            params: idParamSchema,
+            body: proxyEndpointUpdateSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const body = parseWith(proxyEndpointUpdateSchema, request.body);
         const endpoint = await app.proxyProfiles.updateEndpoint(id, body);
@@ -134,7 +197,13 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // DELETE /api/proxy-endpoints/:id
-    app.delete('/api/proxy-endpoints/:id', async (request, reply) => {
+    app.delete('/api/proxy-endpoints/:id', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Delete a proxy endpoint',
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         await app.proxyProfiles.deleteEndpoint(id);
         return reply.code(204).send();
@@ -142,7 +211,15 @@ export const proxyProfileRoutes: FastifyPluginAsync = async (app) => {
 
     // POST /api/proxy-endpoints/:id/toggle — enable resets health to UNKNOWN
     // and clears quarantine; disable marks health DISABLED (operator-owned).
-    app.post('/api/proxy-endpoints/:id/toggle', async (request) => {
+    app.post('/api/proxy-endpoints/:id/toggle', {
+        schema: routeDoc({
+            tags: ['proxies'],
+            summary: 'Enable or disable a proxy endpoint',
+            description: 'Enable resets health to UNKNOWN and clears quarantine; disable marks health DISABLED.',
+            params: idParamSchema,
+            body: toggleSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const { enabled } = parseWith(toggleSchema, request.body);
         const endpoint = await app.proxyProfiles.setEndpointEnabled(id, enabled);

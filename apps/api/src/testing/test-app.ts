@@ -30,12 +30,17 @@ export interface TestAppContext {
     keys: RunControlKeys;
     /** BullMQ queue prefix the app under test was built with. */
     queuePrefix: string;
+    /** Namespaced SSE pub/sub channel builder the app under test was built with. */
+    runEventsChannel: (runId: string) => string;
     /** Rows created by the current test file — deleted by cleanup(). */
     track: {
         scanIds: string[];
         proxyProfileIds: string[];
         cookieProfileIds: string[];
         sessionPolicyIds: string[];
+        listingIds: string[];
+        sellerIds: string[];
+        settingKeys: string[];
     };
     /** Deletes tracked rows + flushes this file's Redis namespace. */
     cleanup: () => Promise<void>;
@@ -58,7 +63,8 @@ export async function buildTestContext(namespace: string): Promise<TestAppContex
         cancelKey: (runId) => `${prefix}:cancel:${runId}`,
     };
     const queuePrefix = `${prefix}:queue`;
-    const app = await buildApp({ env, queuePrefix, keys });
+    const runEventsChannel = (runId: string): string => `${prefix}:run-events:${runId}`;
+    const app = await buildApp({ env, queuePrefix, keys, runEventsChannel });
     await app.ready();
 
     const track: TestAppContext['track'] = {
@@ -66,6 +72,9 @@ export async function buildTestContext(namespace: string): Promise<TestAppContex
         proxyProfileIds: [],
         cookieProfileIds: [],
         sessionPolicyIds: [],
+        listingIds: [],
+        sellerIds: [],
+        settingKeys: [],
     };
 
     const cleanup = async (): Promise<void> => {
@@ -82,11 +91,23 @@ export async function buildTestContext(namespace: string): Promise<TestAppContex
         for (const id of track.sessionPolicyIds.splice(0)) {
             await app.db.prisma.sessionPolicy.deleteMany({ where: { id } });
         }
+        // Listings cascade their images/attributes/priceHistory/seenHistory/
+        // runLinks; sellers are SetNull-detached from listings, so listings go
+        // first, then sellers, then settings.
+        for (const id of track.listingIds.splice(0)) {
+            await app.db.prisma.listing.deleteMany({ where: { id } });
+        }
+        for (const id of track.sellerIds.splice(0)) {
+            await app.db.prisma.seller.deleteMany({ where: { id } });
+        }
+        for (const key of track.settingKeys.splice(0)) {
+            await app.db.prisma.appSetting.deleteMany({ where: { key } });
+        }
         const redisKeys = await app.redis.keys(`${prefix}:*`);
         if (redisKeys.length > 0) await app.redis.del(...redisKeys);
     };
 
-    return { app, keys, queuePrefix, track, cleanup };
+    return { app, keys, queuePrefix, runEventsChannel, track, cleanup };
 }
 
 /** Asserts none of the given secret strings appear anywhere in a response body. */

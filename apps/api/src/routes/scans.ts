@@ -8,6 +8,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import type { ScanRecord } from '@sahibindenbot/database';
+import { routeDoc } from '../docs.js';
 import { ApiError, conflict, notFound, parseWith, type ValidationIssue } from '../errors.js';
 import {
     idParamSchema,
@@ -55,7 +56,16 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     // NOTE: ScanRepository.listWithLatestRun() has no filter/pagination
     // parameters (repo gap — reported); `enabled`/`q` are applied in memory.
     // Scan definitions are operator-scale (tens, not thousands).
-    app.get('/api/scans', async (request) => {
+    app.get('/api/scans', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'List scan definitions with latest run summary',
+            description:
+                'Returns every scan with its latest run inline. enabled/q filters apply in memory ' +
+                '(operator-scale data; ScanRepository.listWithLatestRun has no filter params — reported gap).',
+            querystring: scanListQuerySchema,
+        }),
+    }, async (request) => {
         const query = parseWith(scanListQuerySchema, request.query);
         let items = await app.db.repos.scans.listWithLatestRun();
         if (query.enabled !== undefined) items = items.filter((item) => item.scan.enabled === query.enabled);
@@ -67,7 +77,16 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // POST /api/scans — create (full validation incl. cron, timezone, cdp rule).
-    app.post('/api/scans', async (request, reply) => {
+    app.post('/api/scans', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Create a scan definition',
+            description:
+                'Full field validation: cron expression, IANA timezone, cdpUrl required for browserMode "cdp", ' +
+                'delayMaxMs >= delayMinMs, referenced profile ids must exist (400 PROFILE_NOT_FOUND).',
+            body: scanCreateSchema,
+        }),
+    }, async (request, reply) => {
         const body = parseWith(scanCreateSchema, request.body);
         await assertProfilesExist(app, body);
         const scan = await app.db.repos.scans.create(body);
@@ -75,7 +94,14 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // GET /api/scans/:id — detail incl. latest run summary.
-    app.get('/api/scans/:id', async (request) => {
+    app.get('/api/scans/:id', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Scan definition detail',
+            description: 'Full definition plus the most recent run (latestRun, null when never run).',
+            params: idParamSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const scan = await app.db.repos.scans.getById(id);
         if (scan === null) throw notFound(`scan ${id} not found`);
@@ -85,7 +111,18 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
 
     // PATCH /api/scans/:id — partial update; never touches existing runs
     // (runs execute from their immutable configurationSnapshot).
-    app.patch('/api/scans/:id', async (request) => {
+    app.patch('/api/scans/:id', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Partially update a scan definition',
+            description:
+                'Partial update; never touches existing runs (they execute from their immutable ' +
+                'configurationSnapshot). Cross-field rules (cdpUrl, delay ordering) are checked against ' +
+                'the merged definition only when the patch touches the coupled fields.',
+            params: idParamSchema,
+            body: scanUpdateSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const existing = await app.db.repos.scans.getById(id);
         if (existing === null) throw notFound(`scan ${id} not found`);
@@ -96,7 +133,14 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // DELETE /api/scans/:id — refused while a run is active.
-    app.delete('/api/scans/:id', async (request, reply) => {
+    app.delete('/api/scans/:id', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Delete a scan definition',
+            description: '409 SCAN_HAS_ACTIVE_RUN while a run is active — cancel it first. Runs cascade.',
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         const existing = await app.db.repos.scans.getById(id);
         if (existing === null) throw notFound(`scan ${id} not found`);
@@ -113,7 +157,14 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // POST /api/scans/:id/duplicate — copy with ' (kopya)' suffix, disabled.
-    app.post('/api/scans/:id/duplicate', async (request, reply) => {
+    app.post('/api/scans/:id/duplicate', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Duplicate a scan definition',
+            description: "Copies the definition with a ' (kopya)' name suffix; the copy is created disabled.",
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         const existing = await app.db.repos.scans.getById(id);
         if (existing === null) throw notFound(`scan ${id} not found`);
@@ -122,7 +173,15 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // POST /api/scans/:id/toggle — body { enabled }.
-    app.post('/api/scans/:id/toggle', async (request) => {
+    app.post('/api/scans/:id/toggle', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Enable or disable a scan',
+            description: 'Disabled scans refuse run/test triggers (409 SCAN_DISABLED) and are skipped by the scheduler.',
+            params: idParamSchema,
+            body: toggleSchema,
+        }),
+    }, async (request) => {
         const { id } = parseWith(idParamSchema, request.params);
         const { enabled } = parseWith(toggleSchema, request.body);
         const existing = await app.db.repos.scans.getById(id);
@@ -131,7 +190,17 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // POST /api/scans/:id/run — start a MANUAL run (frozen queue contract).
-    app.post('/api/scans/:id/run', async (request, reply) => {
+    app.post('/api/scans/:id/run', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Start a manual run',
+            description:
+                'Creates the ScanRun row (QUEUED, immutable configurationSnapshot) and enqueues the BullMQ ' +
+                'job per the frozen queue contract. 409 RUN_ALREADY_ACTIVE when a run is active; 409 ' +
+                'SCAN_DISABLED when the scan is disabled.',
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         const scan = await app.db.repos.scans.getById(id);
         if (scan === null) throw notFound(`scan ${id} not found`);
@@ -142,7 +211,16 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
 
     // POST /api/scans/:id/test — TEST run; { maxItems: 10, maxPages: 1 } are
     // merged into the snapshot (frozen contract), the definition is untouched.
-    app.post('/api/scans/:id/test', async (request, reply) => {
+    app.post('/api/scans/:id/test', {
+        schema: routeDoc({
+            tags: ['scans'],
+            summary: 'Start a smoke test run',
+            description:
+                'TEST trigger with the frozen overrides { maxItems: 10, maxPages: 1 } merged into the ' +
+                'configuration snapshot only — the definition is untouched.',
+            params: idParamSchema,
+        }),
+    }, async (request, reply) => {
         const { id } = parseWith(idParamSchema, request.params);
         const scan = await app.db.repos.scans.getById(id);
         if (scan === null) throw notFound(`scan ${id} not found`);
