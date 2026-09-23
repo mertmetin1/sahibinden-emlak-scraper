@@ -14,9 +14,9 @@ import type { z } from 'zod';
 
 /** OpenAPI tags — one per route domain (ARCHITECTURE §7). */
 export const API_TAGS = [
-    { name: 'system', description: 'Health and liveness' },
+    { name: 'system', description: 'Health, liveness, and desktop-stack control' },
     { name: 'dashboard', description: 'Aggregated operator dashboard metrics' },
-    { name: 'listings', description: 'Listing search, detail, price history, CSV export' },
+    { name: 'listings', description: 'Listing search, detail, price history, CSV export, bulk delete' },
     { name: 'scans', description: 'Scan definition CRUD and run triggers' },
     { name: 'runs', description: 'Run inspection, control, event replay and live SSE stream' },
     { name: 'proxies', description: 'Proxy profiles and endpoints (credentials are write-only)' },

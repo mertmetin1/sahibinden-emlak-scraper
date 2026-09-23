@@ -173,6 +173,46 @@ export interface ListingListResponse {
     totalPages: number;
 }
 
+export interface ListingFacetsDto {
+    province: string[];
+    district: string[];
+    neighborhood: string[];
+    listingType: string[];
+    propertyCategory: string[];
+    propertySubtype: string[];
+    rooms: string[];
+    heating: string[];
+    buildingAge: string[];
+    floor: string[];
+    bathroomCount: string[];
+    balcony: string[];
+    furnished: string[];
+    usageStatus: string[];
+    insideSite: string[];
+    creditEligible: string[];
+    exchangeEligible: string[];
+}
+
+export const EMPTY_LISTING_FACETS: ListingFacetsDto = {
+    province: [],
+    district: [],
+    neighborhood: [],
+    listingType: [],
+    propertyCategory: [],
+    propertySubtype: [],
+    rooms: [],
+    heating: [],
+    buildingAge: [],
+    floor: [],
+    bathroomCount: [],
+    balcony: [],
+    furnished: [],
+    usageStatus: [],
+    insideSite: [],
+    creditEligible: [],
+    exchangeEligible: [],
+};
+
 export interface PriceHistoryResponse {
     /** Ascending by changedAt. */
     points: Array<{
@@ -457,4 +497,13 @@ export interface HealthResponse {
     status: 'ok' | 'degraded';
     db: 'up' | 'down';
     redis: 'up' | 'down';
+    worker: 'up' | 'down';
+}
+
+export interface StackStatusResponse {
+    worker: 'up' | 'down';
+    workerHeartbeat: string | null;
+    desktopStack: boolean;
+    lanUrls: string[];
+    apiPort: number;
 }

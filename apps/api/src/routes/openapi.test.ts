@@ -28,11 +28,13 @@ describe('openapi', () => {
         // Required paths across the route domains.
         for (const path of [
             '/api/listings',
+            '/api/listings/facets',
             '/api/scans',
             '/api/dashboard',
             '/api/listings/{id}',
             '/api/listings/{id}/price-history',
             '/api/listings/export.csv',
+            '/api/listings/bulk-delete',
             '/api/runs',
             '/api/runs/{id}',
             '/api/runs/{id}/events',
@@ -42,6 +44,8 @@ describe('openapi', () => {
             '/api/cookie-profiles',
             '/api/session-policies',
             '/health',
+            '/api/stack',
+            '/api/stack/stop',
         ]) {
             expect(spec.paths, `missing path ${path}`).toHaveProperty(path);
         }
@@ -58,7 +62,7 @@ describe('openapi', () => {
         // The listings query schema made it through the Zod → JSON Schema conversion.
         const listingParams = spec.paths['/api/listings'].get.parameters ?? [];
         const paramNames = listingParams.map((p: { name: string }) => p.name);
-        for (const name of ['page', 'pageSize', 'sort', 'order', 'search', 'province', 'sellerType', 'priceMin', 'priceMax', 'priceChanged', 'status']) {
+        for (const name of ['page', 'pageSize', 'sort', 'order', 'search', 'province', 'sellerType', 'priceMin', 'priceMax', 'priceChanged', 'status', 'propertyCategory', 'propertySubtype', 'rooms', 'heating']) {
             expect(paramNames).toContain(name);
         }
         const sortParam = listingParams.find((p: { name: string }) => p.name === 'sort');

@@ -1,6 +1,6 @@
 /**
  * Listing routes — server-side filtered list, full detail, price history,
- * and a streaming CSV export.
+ * streaming CSV export, and operator bulk delete.
  *
  * All filters compose at the DB level via ListingRepository.listWithDerived
  * (WHERE clauses + count in one transaction) — rows are never loaded and
@@ -21,6 +21,7 @@ import { routeDoc } from '../docs.js';
 import { notFound, parseWith } from '../errors.js';
 import {
     idParamSchema,
+    listingBulkDeleteSchema,
     listingExportQuerySchema,
     listingListQuerySchema,
     type ListingExportQuery,
@@ -62,11 +63,23 @@ function toListingFilters(query: ListingListQuery | ListingExportQuery): Listing
     if (query.sellerType !== undefined) filters.sellerType = query.sellerType;
     if (query.listingType !== undefined) filters.listingType = query.listingType;
     if (query.propertyCategory !== undefined) filters.propertyCategory = query.propertyCategory;
+    if (query.propertySubtype !== undefined) filters.propertySubtype = query.propertySubtype;
     if (query.priceMin !== undefined) filters.priceMin = query.priceMin;
     if (query.priceMax !== undefined) filters.priceMax = query.priceMax;
     if (query.m2Min !== undefined) filters.m2Min = query.m2Min;
     if (query.m2Max !== undefined) filters.m2Max = query.m2Max;
     if (query.rooms !== undefined) filters.rooms = query.rooms;
+    if (query.heating !== undefined) filters.heating = query.heating;
+    if (query.buildingAge !== undefined) filters.buildingAge = query.buildingAge;
+    if (query.floor !== undefined) filters.floor = query.floor;
+    if (query.bathroomCount !== undefined) filters.bathroomCount = query.bathroomCount;
+    if (query.balcony !== undefined) filters.balcony = query.balcony;
+    if (query.furnished !== undefined) filters.furnished = query.furnished;
+    if (query.usageStatus !== undefined) filters.usageStatus = query.usageStatus;
+    if (query.insideSite !== undefined) filters.insideSite = query.insideSite;
+    if (query.creditEligible !== undefined) filters.creditEligible = query.creditEligible;
+    if (query.exchangeEligible !== undefined) filters.exchangeEligible = query.exchangeEligible;
+    if (query.siteName !== undefined) filters.siteName = query.siteName;
     if (query.firstSeenFrom !== undefined) filters.firstSeenFrom = query.firstSeenFrom;
     if (query.lastSeenBefore !== undefined) filters.lastSeenBefore = query.lastSeenBefore;
     if (query.priceChanged === true) filters.priceChanged = true;
@@ -169,6 +182,25 @@ export const listingRoutes: FastifyPluginAsync = async (app) => {
         },
     );
 
+    app.get(
+        '/api/listings/facets',
+        {
+            schema: routeDoc({
+                tags: ['listings'],
+                summary: 'Distinct listing filter values',
+                description:
+                    'Returns distinct classification and attribute values currently in the database. ' +
+                    'The same filters as the list endpoint apply, except each facet ignores its own field ' +
+                    'so the selected value remains visible among options.',
+                querystring: listingExportQuerySchema,
+            }),
+        },
+        async (request) => {
+            const query = parseWith(listingExportQuerySchema, request.query);
+            return app.db.repos.listings.listFacets(toListingFilters(query));
+        },
+    );
+
     // GET /api/listings/export.csv — streamed CSV (registered before /:id is
     // unnecessary: find-my-way prefers static over parametric, but the
     // explicit ordering also documents intent).
@@ -228,6 +260,26 @@ export const listingRoutes: FastifyPluginAsync = async (app) => {
             reply.header('content-type', 'text/csv; charset=utf-8');
             reply.header('content-disposition', `attachment; filename="listings-export-${stamp}.csv"`);
             return reply.send(stream);
+        },
+    );
+
+    // POST /api/listings/bulk-delete — operator wipe (cascade). Does not touch crawl jobs.
+    app.post(
+        '/api/listings/bulk-delete',
+        {
+            schema: routeDoc({
+                tags: ['listings'],
+                summary: 'Hard-delete selected listings',
+                description:
+                    'Deletes listings by id. Related images, attributes, price/seen history, and run links ' +
+                    'cascade. Unknown ids are skipped. Does not cancel or mutate running crawls.',
+                body: listingBulkDeleteSchema,
+            }),
+        },
+        async (req) => {
+            const { ids } = parseWith(listingBulkDeleteSchema, req.body);
+            const deleted = await app.db.repos.listings.deleteByIds(ids);
+            return { deleted };
         },
     );
 

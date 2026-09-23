@@ -232,6 +232,9 @@ export type CrawlEventType =
     | 'CHALLENGE_DETECTED'
     | 'HUMAN_SOLVE_REQUESTED'
     | 'HUMAN_SOLVE_RESOLVED'
+    | 'BATCH_COOLDOWN'
+    | 'PROXY_ROTATED'
+    | 'UNUSUAL_ACCESS_COOLDOWN'
     | 'RUN_COMPLETED'
     | 'RUN_FAILED';
 
@@ -307,6 +310,8 @@ export const RedisKeys = {
     cancelKey: (runId: string) => `sahbot:cancel:${runId}`,
     scanLockKey: (scanDefinitionId: string) => `sahbot:lock:scan:${scanDefinitionId}`,
     runEventsChannel: (runId: string) => `run-events:${runId}`,
+    /** Worker process liveness; SET with EX ~20s and refreshed while the worker is up. */
+    workerHeartbeat: 'sahbot:worker:heartbeat',
 } as const;
 
 // ---------------------------------------------------------------------------

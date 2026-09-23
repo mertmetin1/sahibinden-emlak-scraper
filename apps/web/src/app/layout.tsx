@@ -3,6 +3,7 @@ import type * as React from 'react';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
+import { HumanSolveWatcher } from '@/components/layout/human-solve-watcher';
 import { Toaster } from '@/components/ui/sonner';
 
 import './globals.css';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </div>
                 </div>
                 <Toaster />
+                <HumanSolveWatcher />
             </body>
         </html>
     );

@@ -85,7 +85,7 @@ const DEFAULTS: FormState = {
     incrementalMode: false,
     maxItems: '',
     maxPages: '',
-    maxConcurrency: '3',
+    maxConcurrency: '1',
     navigationTimeoutSeconds: '90',
     requestHandlerTimeoutSeconds: '180',
     maxRequestRetries: '8',
@@ -616,7 +616,12 @@ export function ScanForm({
                                     aria-invalid={errors.maxPages !== undefined}
                                 />
                             </Field>
-                            <Field label="Eşzamanlılık (1–10)" htmlFor="sf-maxConcurrency" error={errors.maxConcurrency}>
+                            <Field
+                                label="Eşzamanlılık (1–10)"
+                                htmlFor="sf-maxConcurrency"
+                                error={errors.maxConcurrency}
+                                hint="Detay çekiminde 1 bırakın; paralel sekmeler Cloudflare doğrulamasını tetikler"
+                            >
                                 <Input
                                     id="sf-maxConcurrency"
                                     type="number"
@@ -672,7 +677,12 @@ export function ScanForm({
                                     aria-invalid={errors.maxRequestRetries !== undefined}
                                 />
                             </Field>
-                            <Field label="Min. Bekleme (ms)" htmlFor="sf-delayMin" error={errors.delayMinMs}>
+                            <Field
+                                label="Min. Bekleme (ms)"
+                                htmlFor="sf-delayMin"
+                                error={errors.delayMinMs}
+                                hint="İstekler arasındaki bekleme. Detay taramasında 4000–8000 ms daha az yakalanır"
+                            >
                                 <Input
                                     id="sf-delayMin"
                                     type="number"
@@ -701,7 +711,9 @@ export function ScanForm({
                         <CardHeader>
                             <CardTitle>Proxy</CardTitle>
                             <CardDescription>
-                                Yalnızca Managed modda uygulanır; CDP modunda kullanıcının kendi ağı kullanılır.
+                                Residential IP rotasyonu yalnızca Managed modda çalışır. Her 6 detayda 25–45 sn mola,
+                                çerezler silinir, yeni oturum yeni endpoint alır — olağan dışı erişime düşmeden önce.
+                                CDP, bağlı Chrome’un kendi IP’sini kullanır; proxy yok sayılır.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -723,6 +735,18 @@ export function ScanForm({
                                     </SelectContent>
                                 </Select>
                             </Field>
+                            {state.browserMode === 'cdp' && state.proxyProfileId !== '' && (
+                                <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                                    CDP seçili — proxy rotasyonu uygulanmaz. Olağan dışı erişim kilidini aşmak için
+                                    tarayıcı modunu Managed yapın ve ROUND_ROBIN residential profil kullanın.
+                                </p>
+                            )}
+                            {selectedProxy !== undefined && state.browserMode === 'managed' && selectedProxy.strategy === 'SESSION_STICKY' && (
+                                <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                                    Oturum-sabit strateji hop sonrası yine yeni oturumla döner; yine de ROUND_ROBIN
+                                    residential liste daha öngörülebilir IP dağılımı verir.
+                                </p>
+                            )}
                             {selectedProxy !== undefined && (
                                 <div className="rounded-md border bg-muted/40 p-3 text-sm">
                                     <div className="mb-2 flex items-center gap-2">

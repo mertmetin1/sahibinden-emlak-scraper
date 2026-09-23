@@ -77,7 +77,11 @@ export function crawlConfigFromSnapshot(snapshot: ScanDefinitionSnapshot): Crawl
             browserMode === 'cdp'
                 ? // cdpUrl may be absent — validation is the API layer's job.
                   { mode: 'cdp', cdpUrl: snapshot.cdpUrl ?? undefined }
-                : { mode: 'managed', headless: true },
+                : {
+                      mode: 'managed',
+                      // HITL needs a visible window to solve CF on a fresh residential IP.
+                      headless: (snapshot.humanInTheLoop ?? SNAPSHOT_DEFAULTS.humanInTheLoop) !== true,
+                  },
         // Proxy and cookies are injected via CrawlDeps (ProfileProxyProvider /
         // SessionProvider over decrypted DB profiles) — never via config.
         proxy: null,

@@ -1,12 +1,20 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, ImageOff } from 'lucide-react';
 import Link from 'next/link';
 
+import {
+    ListingsBulkToolbar,
+    ListingsSelectionProvider,
+    RowCheckbox,
+    SelectAllCheckbox,
+    SelectableRow,
+} from '@/components/listings/listings-selection';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDate, formatNumber, formatPrice, formatPriceChange, relativeTime } from '@/lib/format';
 import {
     LISTING_STATUS_TONES,
     LISTING_STATUS_LABELS,
+    LISTING_TYPE_LABELS,
     SELLER_TYPE_LABELS,
     SELLER_TYPE_TONES,
 } from '@/lib/labels';
@@ -53,103 +61,132 @@ function locationText(row: ListingListRow): string {
 }
 
 export function ListingsTable({ rows, query }: { rows: ListingListRow[]; query: ListingQuery }) {
+    const pageIds = rows.map((row) => row.id);
+
     return (
-        <div className="rounded-lg border bg-card">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[56px]"></TableHead>
-                        <TableHead className="w-[110px]">İlan No</TableHead>
-                        <SortableHead field="title" label="Başlık" query={query} />
-                        <SortableHead field="price" label="Fiyat" query={query} className="text-right" />
-                        <SortableHead field="area" label="m²" query={query} className="text-right" />
-                        <TableHead className="text-right">TL/m²</TableHead>
-                        <TableHead>Konum</TableHead>
-                        <TableHead>Satıcı</TableHead>
-                        <TableHead>Durum</TableHead>
-                        <SortableHead field="firstSeenAt" label="İlk Görülme" query={query} />
-                        <SortableHead field="lastSeenAt" label="Son Görülme" query={query} />
-                        <TableHead className="text-right">Fiyat Değ.</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {rows.map((row) => {
-                        const change = formatPriceChange(row.latestPriceChangePercent);
-                        const sellerType = (row.seller?.type ?? row.sellerType ?? 'UNKNOWN') as SellerType;
-                        return (
-                            <TableRow key={row.id}>
-                                <TableCell className="w-[56px] p-1">
-                                    {row.thumbnailUrl ? (
-                                        <img
-                                            src={row.thumbnailUrl}
-                                            alt=""
-                                            loading="lazy"
-                                            className="size-12 rounded-md border bg-muted object-cover"
-                                        />
-                                    ) : (
-                                        <div className="flex size-12 items-center justify-center rounded-md border bg-muted text-muted-foreground">
-                                            <ImageOff className="size-4" />
-                                        </div>
-                                    )}
-                                </TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground">
-                                    {row.sourceListingId}
-                                </TableCell>
-                                <TableCell className="max-w-[320px]">
-                                    <Link
-                                        href={`/ilanlar/${row.id}`}
-                                        className="line-clamp-2 font-medium text-primary hover:underline"
-                                        title={row.title}
-                                    >
-                                        {row.title}
-                                    </Link>
-                                </TableCell>
-                                <TableCell className="text-right font-medium tabular-nums">
-                                    {formatPrice(row.price, row.currency)}
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums">
-                                    {formatNumber(row.grossAreaM2)}
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums text-muted-foreground">
-                                    {row.pricePerSquareMeter !== null
-                                        ? `${formatNumber(row.pricePerSquareMeter)} TL`
-                                        : '—'}
-                                </TableCell>
-                                <TableCell className="max-w-[180px]">
-                                    <span className="line-clamp-1" title={locationText(row)}>
-                                        {locationText(row)}
-                                    </span>
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant={SELLER_TYPE_TONES[sellerType] ?? 'outline'}>
-                                        {SELLER_TYPE_LABELS[sellerType] ?? sellerType}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant={LISTING_STATUS_TONES[row.status]}>
-                                        {LISTING_STATUS_LABELS[row.status]}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-muted-foreground">
-                                    {formatDate(row.firstSeenAt)}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-muted-foreground">
-                                    {relativeTime(row.lastSeenAt)}
-                                </TableCell>
-                                <TableCell
-                                    className={cn(
-                                        'text-right tabular-nums',
-                                        change?.direction === 'up' && 'text-destructive',
-                                        change?.direction === 'down' && 'text-success',
-                                    )}
-                                >
-                                    {change?.text ?? '—'}
-                                </TableCell>
+        <ListingsSelectionProvider pageIds={pageIds}>
+            <div className="space-y-2">
+                <ListingsBulkToolbar />
+                <div className="rounded-lg border bg-card">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-10">
+                                    <SelectAllCheckbox />
+                                </TableHead>
+                                <TableHead className="w-[56px]"></TableHead>
+                                <TableHead className="w-[110px]">İlan No</TableHead>
+                                <SortableHead field="title" label="Başlık" query={query} />
+                                <SortableHead field="price" label="Fiyat" query={query} className="text-right" />
+                                <SortableHead field="area" label="m²" query={query} className="text-right" />
+                                <TableHead className="text-right">TL/m²</TableHead>
+                                <TableHead>Konum</TableHead>
+                                <TableHead>Satıcı</TableHead>
+                                <TableHead>Durum</TableHead>
+                                <SortableHead field="firstSeenAt" label="İlk Görülme" query={query} />
+                                <SortableHead field="lastSeenAt" label="Son Görülme" query={query} />
+                                <TableHead className="text-right">Fiyat Değ.</TableHead>
                             </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
-        </div>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((row) => {
+                                const change = formatPriceChange(row.latestPriceChangePercent);
+                                const sellerType = (row.seller?.type ?? row.sellerType ?? 'UNKNOWN') as SellerType;
+                                return (
+                                    <SelectableRow key={row.id} id={row.id}>
+                                        <TableCell className="w-10">
+                                            <RowCheckbox id={row.id} label={row.sourceListingId} />
+                                        </TableCell>
+                                        <TableCell className="w-[56px] p-1">
+                                            {row.thumbnailUrl ? (
+                                                <img
+                                                    src={row.thumbnailUrl}
+                                                    alt=""
+                                                    loading="lazy"
+                                                    className="size-12 rounded-md border bg-muted object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex size-12 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+                                                    <ImageOff className="size-4" />
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs text-muted-foreground">
+                                            {row.sourceListingId}
+                                        </TableCell>
+                                        <TableCell className="max-w-[320px]">
+                                            <Link
+                                                href={`/ilanlar/${row.id}`}
+                                                className="line-clamp-2 font-medium text-primary hover:underline"
+                                                title={row.title}
+                                            >
+                                                {row.title}
+                                            </Link>
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                {row.listingType !== null && row.listingType !== '' && (
+                                                    <Badge variant="outline">
+                                                        {LISTING_TYPE_LABELS[row.listingType] ?? row.listingType}
+                                                    </Badge>
+                                                )}
+                                                {row.propertyCategory !== null && row.propertyCategory !== '' && (
+                                                    <Badge variant="secondary">{row.propertyCategory}</Badge>
+                                                )}
+                                                {row.propertySubtype !== null && row.propertySubtype !== '' && (
+                                                    <Badge variant="secondary">{row.propertySubtype}</Badge>
+                                                )}
+                                                {row.rooms !== null && row.rooms !== '' && (
+                                                    <Badge variant="outline">{row.rooms}</Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium tabular-nums">
+                                            {formatPrice(row.price, row.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right tabular-nums">
+                                            {formatNumber(row.grossAreaM2)}
+                                        </TableCell>
+                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                            {row.pricePerSquareMeter !== null
+                                                ? `${formatNumber(row.pricePerSquareMeter)} TL`
+                                                : '—'}
+                                        </TableCell>
+                                        <TableCell className="max-w-[180px]">
+                                            <span className="line-clamp-1" title={locationText(row)}>
+                                                {locationText(row)}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={SELLER_TYPE_TONES[sellerType] ?? 'outline'}>
+                                                {SELLER_TYPE_LABELS[sellerType] ?? sellerType}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={LISTING_STATUS_TONES[row.status]}>
+                                                {LISTING_STATUS_LABELS[row.status]}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {formatDate(row.firstSeenAt)}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {relativeTime(row.lastSeenAt)}
+                                        </TableCell>
+                                        <TableCell
+                                            className={cn(
+                                                'text-right tabular-nums',
+                                                change?.direction === 'up' && 'text-destructive',
+                                                change?.direction === 'down' && 'text-success',
+                                            )}
+                                        >
+                                            {change?.text ?? '—'}
+                                        </TableCell>
+                                    </SelectableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+        </ListingsSelectionProvider>
     );
 }

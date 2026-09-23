@@ -17,6 +17,9 @@
         "db:migrate": "pnpm --filter @sahibindenbot/database exec prisma migrate deploy",
         "db:seed": "pnpm --filter @sahibindenbot/database exec tsx prisma/seed.ts",
         "db:studio": "pnpm --filter @sahibindenbot/database exec prisma studio",
+        "desktop:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop/start.ps1",
+        "desktop:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop/stop.ps1",
+        "desktop:shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop/install-shortcut.ps1",
         "clean": "git clean -fdx packages apps --exclude node_modules || true"
     },
     "pnpm": {

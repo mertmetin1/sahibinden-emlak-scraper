@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { formatTime } from '@/lib/format';
 import { describeRunEvent, runEventTone } from '@/lib/run-events';
+import { alertHumanSolve, alertUnusualAccess, payloadKindUrl } from '@/lib/human-solve-alert';
 import { streamSse } from '@/lib/sse';
 import { TERMINAL_RUN_STATUSES, type RunEventDto, type RunEventMessage, type RunStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -75,6 +76,13 @@ export function RunEventLog({
             // sessionStorage unavailable (private mode) — in-memory cursor still works.
         }
         setEvents((prev) => [...prev, event]);
+        if (event.type === 'HUMAN_SOLVE_REQUESTED') {
+            const extra = payloadKindUrl(event.data);
+            alertHumanSolve({ runId, eventId: event.id, kind: extra.kind, url: extra.url });
+        } else if (event.type === 'UNUSUAL_ACCESS_COOLDOWN') {
+            const extra = payloadKindUrl(event.data);
+            alertUnusualAccess({ runId, eventId: event.id, resumeUrl: extra.resumeUrl ?? extra.url });
+        }
     }, [runId]);
 
     useEffect(() => {

@@ -212,12 +212,24 @@ export interface ListingFilters {
     sellerType?: string;
     listingType?: string;
     propertyCategory?: string;
+    propertySubtype?: string;
     priceMin?: number;
     priceMax?: number;
     /** m² filters apply to grossAreaM2 (the site-advertised area). */
     m2Min?: number;
     m2Max?: number;
     rooms?: string;
+    heating?: string;
+    buildingAge?: string;
+    floor?: string;
+    bathroomCount?: string;
+    balcony?: string;
+    furnished?: string;
+    usageStatus?: string;
+    insideSite?: string;
+    creditEligible?: string;
+    exchangeEligible?: string;
+    siteName?: string;
     firstSeenFrom?: Date;
     lastSeenBefore?: Date;
     /** True = only listings with at least one price-history row. */
@@ -226,6 +238,27 @@ export interface ListingFilters {
     scanId?: string;
     /** Case-insensitive substring over sourceListingId, title, description, seller names. */
     search?: string;
+}
+
+/** Distinct values currently in the DB — drives listing filter dropdowns. */
+export interface ListingFacets {
+    province: string[];
+    district: string[];
+    neighborhood: string[];
+    listingType: string[];
+    propertyCategory: string[];
+    propertySubtype: string[];
+    rooms: string[];
+    heating: string[];
+    buildingAge: string[];
+    floor: string[];
+    bathroomCount: string[];
+    balcony: string[];
+    furnished: string[];
+    usageStatus: string[];
+    insideSite: string[];
+    creditEligible: string[];
+    exchangeEligible: string[];
 }
 
 export type ListingSortField = 'price' | 'pricePerSquareMeter' | 'firstSeenAt' | 'lastSeenAt' | 'listingDate';
@@ -384,6 +417,8 @@ export interface ListingRepository {
     markRunObservations(runId: string, pairs: Array<{ listingId: string; outcome: ListingOutcome }>): Promise<void>;
     /** Explicit site signal only ("yayından kaldırıldı"). Never called for absence. */
     markRemoved(listingId: string): Promise<boolean>;
+    /** Hard-delete listings (cascade images/attrs/history/run-links). Unknown ids are skipped. */
+    deleteByIds(ids: string[]): Promise<number>;
     /**
      * Staleness evaluation after a non-incremental SUCCEEDED run:
      * listings expected (seen by previous successful non-incremental runs of
@@ -403,6 +438,8 @@ export interface ListingRepository {
         pageSize: number,
         sort?: ListingSort,
     ): Promise<ListingListResult>;
+    /** Distinct classification/attribute values, optionally narrowed by other filters. */
+    listFacets(filters: ListingFilters): Promise<ListingFacets>;
     getById(id: string): Promise<ListingDetailRecord | null>;
 }
 

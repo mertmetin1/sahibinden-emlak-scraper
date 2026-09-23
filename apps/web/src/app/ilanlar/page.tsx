@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 
+import { ListingsActiveFilters } from '@/components/listings/listings-active-filters';
 import { ListingsFilterSheet } from '@/components/listings/filter-sheet';
+import { ListingsSearchBar } from '@/components/listings/listings-search-bar';
 import { ListingsTable } from '@/components/listings/listings-table';
 import { Pagination } from '@/components/listings/pagination';
 import { EmptyState } from '@/components/empty-state';
@@ -8,7 +10,12 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { activeFilterCount, listingQueryString, parseListingSearchParams } from '@/lib/listing-params';
 import { serverApiGet } from '@/lib/server-api';
-import type { ListingListResponse, ScanListResponse } from '@/lib/types';
+import {
+    EMPTY_LISTING_FACETS,
+    type ListingFacetsDto,
+    type ListingListResponse,
+    type ScanListResponse,
+} from '@/lib/types';
 import { Home } from 'lucide-react';
 import Link from 'next/link';
 
@@ -22,16 +29,18 @@ interface PageProps {
 
 export default async function ListingsPage({ searchParams }: PageProps) {
     const query = parseListingSearchParams(await searchParams);
+    const scanOptions = (scans: ScanListResponse) => scans.rows.map((s) => ({ id: s.id, name: s.name }));
 
-    // Listings + the scan filter's options (operator-scale list) in parallel.
-    const [listings, scans] = await Promise.all([
+    const facetQuery = listingQueryString(query, { paginate: false });
+    const [listings, scans, facets] = await Promise.all([
         serverApiGet<ListingListResponse>(`/api/listings?${listingQueryString(query)}`),
         serverApiGet<ScanListResponse>('/api/scans'),
+        serverApiGet<ListingFacetsDto>(`/api/listings/facets?${facetQuery}`).catch(() => EMPTY_LISTING_FACETS),
     ]);
 
     const filterCount = activeFilterCount(query);
-    // CSV export uses the same filters/sort, without pagination (streamed, capped server-side).
     const exportHref = `/api/listings/export.csv?${listingQueryString(query, { paginate: false })}`;
+    const scanRows = scanOptions(scans);
 
     return (
         <div className="space-y-4">
@@ -40,20 +49,24 @@ export default async function ListingsPage({ searchParams }: PageProps) {
                 description={`${listings.total.toLocaleString('tr-TR')} ilan`}
                 actions={
                     <>
-                        {/* key remounts the drawer on navigation so its form state re-syncs from the URL */}
                         <ListingsFilterSheet
                             key={listingQueryString(query)}
                             query={query}
                             filterCount={filterCount}
-                            scans={scans.rows.map((s) => ({ id: s.id, name: s.name }))}
+                            scans={scanRows}
+                            facets={facets}
                         />
                         <Button asChild variant="outline" size="sm">
-                            {/* Same-origin through the rewrite; content-disposition downloads. */}
                             <a href={exportHref}>CSV İndir</a>
                         </Button>
                     </>
                 }
             />
+
+            <div className="flex flex-col gap-2">
+                <ListingsSearchBar key={query.filters.search ?? ''} query={query} />
+                <ListingsActiveFilters query={query} scans={scanRows} />
+            </div>
 
             {listings.rows.length === 0 ? (
                 <EmptyState

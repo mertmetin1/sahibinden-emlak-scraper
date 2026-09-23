@@ -68,7 +68,7 @@ describe('crawlConfigFromSnapshot', () => {
             delayMaxMs: 5000,
             debugMode: false,
             storeRawHtml: false,
-            browser: { mode: 'managed', headless: true },
+            browser: { mode: 'managed', headless: false },
             proxy: null,
             sessionCookiesFile: null,
             allowedDomains: ['sahibinden.com', 'www.sahibinden.com'],
@@ -95,7 +95,7 @@ describe('crawlConfigFromSnapshot', () => {
         expect(config.includeDetails).toBe(false);
         expect(config.allowedDomains).toEqual(['sahibinden.com', 'www.sahibinden.com']);
         expect(config.humanInTheLoop).toBe(true);
-        expect(config.browser).toEqual({ mode: 'managed', headless: true });
+        expect(config.browser).toEqual({ mode: 'managed', headless: false });
         // Explicit nulls survive as nulls (unlimited), not as defaults-of-last-resort.
         expect(config.maxItems).toBeNull();
         expect(config.maxPages).toBeNull();

@@ -18,9 +18,11 @@
  * maintenance job traffic yet.
  */
 import { Queue } from 'bullmq';
-import { createLogger, redactSecrets, toRuntimeLogger } from '@sahibindenbot/shared';
-import { CRAWL_QUEUE } from '@sahibindenbot/shared';
-import type { CrawlJobData } from '@sahibindenbot/shared';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createLogger, redactSecrets, RedisKeys, toRuntimeLogger, CRAWL_QUEUE, type CrawlJobData } from '@sahibindenbot/shared';
 import {
     createDatabaseClient,
     PrismaCookieProfileRepository,
@@ -37,6 +39,12 @@ import type { QueueAdminDeps } from './queue-admin.js';
 
 /** §6.3: cooperative-cancel budget for the active run during shutdown. */
 const SHUTDOWN_BUDGET_MS = 25_000;
+const HEARTBEAT_TTL_SECS = 20;
+const HEARTBEAT_EVERY_MS = 10_000;
+
+function repoRoot(): string {
+    return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+}
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -87,6 +95,29 @@ async function main(): Promise<void> {
     scheduler.start();
     sweeper.start();
 
+    const workerAliveFile = path.join(repoRoot(), 'storage', 'worker.alive');
+    const publishHeartbeat = async (): Promise<void> => {
+        const payload = JSON.stringify({
+            pid: process.pid,
+            hostname: os.hostname(),
+            at: new Date().toISOString(),
+        });
+        await redis.set(RedisKeys.workerHeartbeat, payload, 'EX', HEARTBEAT_TTL_SECS);
+        try {
+            await mkdir(path.dirname(workerAliveFile), { recursive: true });
+            await writeFile(workerAliveFile, payload, 'utf8');
+        } catch {
+            // File is a convenience for the desktop launcher; Redis is canonical.
+        }
+    };
+    await publishHeartbeat();
+    const heartbeatTimer = setInterval(() => {
+        void publishHeartbeat().catch((err: unknown) => {
+            logger.warn({ err: errMessage(err) }, 'worker heartbeat failed');
+        });
+    }, HEARTBEAT_EVERY_MS);
+    heartbeatTimer.unref?.();
+
     workerHandle.worker.on('completed', (job) => {
         logger.info({ jobId: job.id, runId: job.data.runId }, 'crawl job completed');
     });
@@ -112,6 +143,9 @@ async function main(): Promise<void> {
             // 1) stop producing work
             scheduler.stop();
             sweeper.stop();
+            clearInterval(heartbeatTimer);
+            await redis.del(RedisKeys.workerHeartbeat).catch(() => undefined);
+            await unlink(workerAliveFile).catch(() => undefined);
             logger.info('scheduler + sweeper stopped');
 
             // 2) stop fetching new jobs

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { HealthResponse } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 10_000;
 
 type HealthState =
     | { kind: 'loading' }
@@ -13,9 +13,7 @@ type HealthState =
     | { kind: 'error' };
 
 /**
- * API health dot in the topbar — polls GET /health (proxied to the API via
- * the next.config rewrite) every 30s. Green when db+redis are up, red
- * otherwise; details in the tooltip.
+ * API + worker health dots in the topbar — polls GET /health every 10s.
  */
 export function HealthIndicator() {
     const [state, setState] = useState<HealthState>({ kind: 'loading' });
@@ -41,23 +39,39 @@ export function HealthIndicator() {
     }, [check]);
 
     const up = state.kind === 'ok';
+    const workerUp = state.kind === 'ok' && state.health.worker === 'up';
     const title =
         state.kind === 'ok'
-            ? `API çalışıyor — db: ${state.health.db}, redis: ${state.health.redis}`
+            ? `API ${state.health.status} — db: ${state.health.db}, redis: ${state.health.redis}, worker: ${state.health.worker}`
             : state.kind === 'loading'
               ? 'API durumu kontrol ediliyor…'
               : 'API erişilemiyor veya degrade (db/redis)';
 
     return (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground" title={title}>
-            <span
-                className={cn(
-                    'inline-block size-2 rounded-full',
-                    up ? 'bg-success' : state.kind === 'loading' ? 'bg-muted-foreground/50' : 'bg-destructive',
-                    up && 'shadow-[0_0_0_3px] shadow-success/20',
-                )}
-            />
-            <span className="hidden sm:inline">API {up ? 'Bağlı' : state.kind === 'loading' ? '…' : 'Hata'}</span>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground" title={title}>
+            <div className="flex items-center gap-2">
+                <span
+                    className={cn(
+                        'inline-block size-2 rounded-full',
+                        up ? 'bg-success' : state.kind === 'loading' ? 'bg-muted-foreground/50' : 'bg-destructive',
+                        up && 'shadow-[0_0_0_3px] shadow-success/20',
+                    )}
+                />
+                <span className="hidden sm:inline">API {up ? 'Bağlı' : state.kind === 'loading' ? '…' : 'Hata'}</span>
+            </div>
+            <div className="hidden items-center gap-2 sm:flex">
+                <span
+                    className={cn(
+                        'inline-block size-2 rounded-full',
+                        state.kind === 'loading'
+                            ? 'bg-muted-foreground/50'
+                            : workerUp
+                              ? 'bg-success'
+                              : 'bg-warning',
+                    )}
+                />
+                <span>Worker {state.kind === 'loading' ? '…' : workerUp ? 'Bağlı' : 'Kapalı'}</span>
+            </div>
         </div>
     );
 }

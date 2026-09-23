@@ -19,6 +19,7 @@ import { RunControlService, type RunControlKeys } from './queue.js';
 import { prismaPlugin } from './plugins/prisma.js';
 import { openApiPlugin } from './plugins/openapi.js';
 import { healthRoutes } from './routes/health.js';
+import { stackRoutes } from './routes/stack.js';
 import { scanRoutes } from './routes/scans.js';
 import { runRoutes } from './routes/runs.js';
 import { runEventRoutes } from './routes/run-events.js';
@@ -213,6 +214,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
     // -- Routes ---------------------------------------------------------------
     await app.register(healthRoutes);
+    await app.register(stackRoutes);
     await app.register(scanRoutes);
     await app.register(runRoutes);
     await app.register(runEventRoutes, {

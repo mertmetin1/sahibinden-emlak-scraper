@@ -119,6 +119,8 @@ describe('listWithDerived — filters', () => {
                 district: 'Kadıköy',
                 sellerType: 'OWNER',
                 sellerTypeEvidence: 'Sahibinden',
+                propertySubtype: 'Müstakil Ev',
+                rooms: '4+1',
             }),
             run1.id,
         );
@@ -133,6 +135,8 @@ describe('listWithDerived — filters', () => {
                 district: 'Kadıköy',
                 sellerType: 'OWNER',
                 sellerTypeEvidence: 'Sahibinden',
+                propertySubtype: 'Müstakil Ev',
+                rooms: '4+1',
             }),
             run2.id,
         );
@@ -191,6 +195,24 @@ describe('listWithDerived — filters', () => {
         expect(result.total).toBe(1);
         expect(result.rows[0]!.sourceListingId).toBe('F2');
         expect(result.rows[0]!.priceChanged).toBe(true);
+    });
+
+    it('filters by propertySubtype and rooms (case-insensitive)', async () => {
+        const subtype = await db.repos.listings.listWithDerived({ propertySubtype: 'müstakil ev' }, 1, 10);
+        expect(subtype.total).toBe(1);
+        expect(subtype.rows[0]!.sourceListingId).toBe('F2');
+
+        const rooms = await db.repos.listings.listWithDerived({ rooms: '4+1' }, 1, 10);
+        expect(rooms.total).toBe(1);
+        expect(rooms.rows[0]!.sourceListingId).toBe('F2');
+    });
+
+    it('listFacets returns distinct classification values for the current filter', async () => {
+        const facets = await db.repos.listings.listFacets({ province: 'İstanbul' });
+        expect(facets.propertySubtype).toEqual(expect.arrayContaining(['Daire', 'Müstakil Ev']));
+        expect(facets.rooms).toEqual(expect.arrayContaining(['2+1', '4+1']));
+        expect(facets.listingType).toContain('SALE');
+        expect(facets.propertyCategory).toEqual(['Konut']);
     });
 });
 

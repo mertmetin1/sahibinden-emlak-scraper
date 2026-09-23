@@ -336,6 +336,18 @@ describe('removal semantics', () => {
         expect((await findListing('2000000022'))!.status).toBe('REMOVED');
         await expect(db.repos.listings.markRemoved(r.listingId)).resolves.toBe(false);
     });
+
+    it('deleteByIds hard-deletes listings and skips unknown ids', async () => {
+        const scan = await createScan(db);
+        const run = await createRun(db, scan.id);
+        const kept = await db.repos.listings.upsertCategoryListing(makeCategoryListing({ id: '2000000023' }), run.id);
+        const doomed = await db.repos.listings.upsertCategoryListing(makeCategoryListing({ id: '2000000024' }), run.id);
+
+        await expect(db.repos.listings.deleteByIds([doomed.listingId, 'missing'])).resolves.toBe(1);
+        expect(await findListing('2000000024')).toBeNull();
+        expect(await findListing('2000000023')).not.toBeNull();
+        expect(kept.listingId).toBeTruthy();
+    });
 });
 
 describe('identity guard', () => {

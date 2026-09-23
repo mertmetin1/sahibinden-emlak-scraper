@@ -63,7 +63,11 @@ export function classifyError(err: unknown): CrawlErrorCode {
         m.includes('err_') ||
         m.includes('econn') ||
         m.includes('enotfound') ||
-        m.includes('socket hang up')
+        m.includes('socket hang up') ||
+        m.includes('failed to launch browser') ||
+        m.includes('failed to open a new tab') ||
+        m.includes('createtarget') ||
+        m.includes('cdp chrome')
     ) {
         return 'NETWORK';
     }

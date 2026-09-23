@@ -127,6 +127,83 @@ export const LISTING_TYPE_LABELS: Record<string, string> = {
     UNKNOWN: 'Bilinmiyor',
 };
 
+export const PROPERTY_CATEGORY_OPTIONS = [
+    'Konut',
+    'İşyeri',
+    'Arsa',
+    'Bina',
+    'Devre Mülk',
+    'Turistik Tesis',
+] as const;
+
+export const PROPERTY_SUBTYPE_OPTIONS: Record<string, readonly string[]> = {
+    Konut: [
+        'Daire',
+        'Residence',
+        'Müstakil Ev',
+        'Villa',
+        'Yazlık',
+        'Köşk & Konak',
+        'Çiftlik Evi',
+        'Yalı',
+        'Yalı Dairesi',
+        'Loft',
+        'Prefabrik Ev',
+        'Kooperatif',
+    ],
+    İşyeri: [
+        'Dükkan & Mağaza',
+        'Ofis',
+        'Büro',
+        'Plaza',
+        'Depo & Antrepo',
+        'Fabrika',
+        'Atölye',
+        'İmalathane',
+        'Cafe & Bar',
+        'Restoran',
+        'Otel',
+    ],
+    Arsa: ['İmarlı', 'İmarsız', 'Tarla', 'Bahçe', 'Bağ & Bahçe', 'Ticari Arsa'],
+    Bina: ['Apartman', 'Müstakil Bina', 'İş Hanı'],
+    'Devre Mülk': ['Devre Mülk'],
+    'Turistik Tesis': ['Otel', 'Apart Otel', 'Pansiyon', 'Kamp Yeri'],
+};
+
+export const ROOM_OPTIONS = [
+    'Stüdyo (1+0)',
+    '1+0',
+    '1+1',
+    '2+0',
+    '2+1',
+    '2+2',
+    '3+1',
+    '3+2',
+    '4+1',
+    '4+2',
+    '5+1',
+    '5+2',
+    '6+1',
+    '7+1',
+    '8+1',
+    '9+1',
+    '10+ üzeri',
+] as const;
+
+export const HEATING_OPTIONS = [
+    'Kombi (Doğalgaz)',
+    'Merkezi',
+    'Merkezi (Pay Ölçer)',
+    'Yerden Isıtma',
+    'Klima',
+    'Soba',
+    'Doğalgaz Sobası',
+    'Kat Kaloriferi',
+    'Yok',
+] as const;
+
+export const YES_NO_OPTIONS = ['Evet', 'Hayır', 'Var', 'Yok'] as const;
+
 /** Known API error codes → operator-friendly Turkish (fallback: raw message). */
 export const API_ERROR_LABELS: Record<string, string> = {
     VALIDATION_ERROR: 'Form doğrulama hatası',

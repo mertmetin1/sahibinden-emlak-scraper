@@ -50,8 +50,20 @@ export function describeRunEvent(type: string, data: unknown): string {
             return `İstek başarısız: ${str(d.url) ?? '?'} — ${str(d.message) ?? str(d.errorCode) ?? '?'}`;
         case 'SESSION_RETIRED':
             return `Oturum emekliye ayrıldı (${str(d.reason) ?? 'bilinmiyor'})`;
-        case 'PROXY_FAILURE':
-            return `Proxy hatası: ${str(d.host) ?? '?'} (${str(d.errorCode) ?? '?'})`;
+        case 'CHALLENGE_DETECTED':
+            return `Challenge tespit edildi: ${str(d.kind) ?? '?'} — ${str(d.url) ?? '?'}`;
+        case 'HUMAN_SOLVE_REQUESTED':
+            return `İnsan doğrulaması bekleniyor (${str(d.kind) ?? 'challenge'}): debug Chrome’da geçin — ${str(d.url) ?? '?'}`;
+        case 'HUMAN_SOLVE_RESOLVED':
+            return `Doğrulama geçti, tarama devam ediyor${str(d.url) !== null ? `: ${str(d.url)}` : ''}`;
+        case 'BATCH_COOLDOWN':
+            return `Batch molası: ${num(d.detailsWritten) ?? '?'} detay, ${num(d.cooldownMs) !== null ? `${Math.round((num(d.cooldownMs) ?? 0) / 1000)}s` : '?'}`;
+        case 'PROXY_ROTATED':
+            return `Proxy hop: ${num(d.detailsWritten) ?? '?'} detay, ${num(d.cooldownMs) !== null ? `${Math.round((num(d.cooldownMs) ?? 0) / 1000)}s mola` : 'mola'}, devam ${str(d.resumeUrl) ?? '?'}`;
+        case 'UNUSUAL_ACCESS_COOLDOWN':
+            return `Olağan dışı erişim — 10 dk mola, çerezler temizlenip devam: ${str(d.resumeUrl) ?? str(d.url) ?? '?'}`;
+        case 'DETAIL_UNAVAILABLE':
+            return `Detay yayında değil: ${str(d.listingId) ?? str(d.url) ?? '?'}`;
         case 'RUN_COMPLETED':
             return `Run tamamlandı: ${str(d.status) ?? '?'}`;
         case 'RUN_FAILED':
@@ -63,7 +75,18 @@ export function describeRunEvent(type: string, data: unknown): string {
 
 export function runEventTone(type: string): EventTone {
     if (type === 'REQUEST_FAILED' || type === 'RUN_FAILED') return 'destructive';
-    if (type === 'REQUEST_RETRY' || type === 'SESSION_RETIRED' || type === 'PROXY_FAILURE') return 'warning';
+    if (
+        type === 'REQUEST_RETRY' ||
+        type === 'SESSION_RETIRED' ||
+        type === 'PROXY_FAILURE' ||
+        type === 'CHALLENGE_DETECTED' ||
+        type === 'HUMAN_SOLVE_REQUESTED' ||
+        type === 'UNUSUAL_ACCESS_COOLDOWN' ||
+        type === 'PROXY_ROTATED'
+    ) {
+        return 'warning';
+    }
+    if (type === 'HUMAN_SOLVE_RESOLVED') return 'success';
     if (type === 'LISTING_DISCOVERED' || type === 'LISTING_INSERTED') return 'success';
     if (type === 'LISTING_UPDATED' || type === 'PRICE_CHANGED') return 'info';
     if (type === 'RUN_STARTED' || type === 'RUN_COMPLETED') return 'default';

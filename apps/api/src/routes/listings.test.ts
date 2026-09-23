@@ -109,6 +109,22 @@ describe('listings', () => {
         expect(empty.rows).toEqual([]);
     });
 
+    it('filters by property type/subtype/rooms and exposes those values as facets', async () => {
+        const daire = await list(`province=${province}&propertyCategory=Konut&propertySubtype=Daire&rooms=2%2B1`);
+        expect(daire.total).toBe(1);
+        expect(daire.rows.map((row) => row.id)).toEqual([ids.a]);
+
+        const facetsRes = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/listings/facets?province=${province}`,
+        });
+        expect(facetsRes.statusCode).toBe(200);
+        const facets = facetsRes.json() as { propertyCategory: string[]; rooms: string[]; listingType: string[] };
+        expect(facets.propertyCategory).toContain('Konut');
+        expect(facets.rooms).toEqual(expect.arrayContaining(['2+1', '3+1', '4+1']));
+        expect(facets.listingType).toContain('SALE');
+    });
+
     it('paginates stably: pages 1/2/3 have no overlaps and totalPages is exact', async () => {
         const pageSize = 2;
         const seen: string[] = [];
@@ -177,5 +193,30 @@ describe('listings', () => {
         expect(tooBig.statusCode).toBe(400);
         const badBool = await ctx.app.inject({ method: 'GET', url: '/api/listings?priceChanged=yes' });
         expect(badBool.statusCode).toBe(400);
+    });
+
+    it('POST /api/listings/bulk-delete rejects an empty ids list', async () => {
+        const res = await ctx.app.inject({
+            method: 'POST',
+            url: '/api/listings/bulk-delete',
+            payload: { ids: [] },
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('POST /api/listings/bulk-delete hard-deletes matching ids and skips unknowns', async () => {
+        const doomed = ids.a;
+        const res = await ctx.app.inject({
+            method: 'POST',
+            url: '/api/listings/bulk-delete',
+            payload: { ids: [doomed, 'does-not-exist'] },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(res.json()).toEqual({ deleted: 1 });
+
+        const remaining = await list(`province=${province}`);
+        expect(remaining.rows.map((row) => row.id)).not.toContain(doomed);
+        expect(remaining.total).toBe(4);
     });
 });

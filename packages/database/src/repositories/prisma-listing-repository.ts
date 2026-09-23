@@ -20,6 +20,7 @@ import type {
     BatchUpsertResult,
     ListingDetailRecord,
     ListingFilters,
+    ListingFacets,
     ListingListResult,
     ListingRepository,
     ListingSort,
@@ -145,6 +146,98 @@ function isIncrementalSnapshot(snapshot: unknown): boolean {
 }
 
 const SORTABLE_NULLABLE: ReadonlySet<ListingSortField> = new Set(['price', 'pricePerSquareMeter', 'listingDate']);
+
+const FACET_COLUMNS = [
+    'province',
+    'district',
+    'neighborhood',
+    'listingType',
+    'propertyCategory',
+    'propertySubtype',
+    'rooms',
+    'heating',
+    'buildingAge',
+    'floor',
+    'bathroomCount',
+    'balcony',
+    'furnished',
+    'usageStatus',
+    'insideSite',
+    'creditEligible',
+    'exchangeEligible',
+] as const;
+
+type FacetColumn = (typeof FACET_COLUMNS)[number];
+
+function eqI(value: string): Prisma.StringFilter {
+    return { equals: value, mode: 'insensitive' };
+}
+
+function listingWhere(filters: ListingFilters, omit: ReadonlySet<string> = new Set()): Prisma.ListingWhereInput {
+    const use = (key: keyof ListingFilters): boolean => filters[key] !== undefined && !omit.has(key);
+    const where: Prisma.ListingWhereInput = {};
+    if (use('status')) where.status = filters.status;
+    if (use('province') && filters.province !== undefined) where.province = eqI(filters.province);
+    if (use('district') && filters.district !== undefined) where.district = eqI(filters.district);
+    if (use('neighborhood') && filters.neighborhood !== undefined) where.neighborhood = eqI(filters.neighborhood);
+    if (use('sellerType')) where.sellerType = filters.sellerType;
+    if (use('listingType') && filters.listingType !== undefined) where.listingType = eqI(filters.listingType);
+    if (use('propertyCategory') && filters.propertyCategory !== undefined) {
+        where.propertyCategory = eqI(filters.propertyCategory);
+    }
+    if (use('propertySubtype') && filters.propertySubtype !== undefined) {
+        where.propertySubtype = eqI(filters.propertySubtype);
+    }
+    if (use('priceMin') || use('priceMax')) {
+        where.price = {
+            ...(use('priceMin') ? { gte: filters.priceMin } : {}),
+            ...(use('priceMax') ? { lte: filters.priceMax } : {}),
+        };
+    }
+    if (use('m2Min') || use('m2Max')) {
+        where.grossAreaM2 = {
+            ...(use('m2Min') ? { gte: filters.m2Min } : {}),
+            ...(use('m2Max') ? { lte: filters.m2Max } : {}),
+        };
+    }
+    if (use('rooms') && filters.rooms !== undefined) where.rooms = eqI(filters.rooms);
+    if (use('heating') && filters.heating !== undefined) where.heating = eqI(filters.heating);
+    if (use('buildingAge') && filters.buildingAge !== undefined) where.buildingAge = eqI(filters.buildingAge);
+    if (use('floor') && filters.floor !== undefined) where.floor = eqI(filters.floor);
+    if (use('bathroomCount') && filters.bathroomCount !== undefined) where.bathroomCount = eqI(filters.bathroomCount);
+    if (use('balcony') && filters.balcony !== undefined) where.balcony = eqI(filters.balcony);
+    if (use('furnished') && filters.furnished !== undefined) where.furnished = eqI(filters.furnished);
+    if (use('usageStatus') && filters.usageStatus !== undefined) where.usageStatus = eqI(filters.usageStatus);
+    if (use('insideSite') && filters.insideSite !== undefined) where.insideSite = eqI(filters.insideSite);
+    if (use('creditEligible') && filters.creditEligible !== undefined) where.creditEligible = eqI(filters.creditEligible);
+    if (use('exchangeEligible') && filters.exchangeEligible !== undefined) {
+        where.exchangeEligible = eqI(filters.exchangeEligible);
+    }
+    if (use('siteName') && filters.siteName !== undefined) {
+        where.siteName = { contains: filters.siteName, mode: 'insensitive' };
+    }
+    if (use('firstSeenFrom') && filters.firstSeenFrom !== undefined) {
+        where.firstSeenAt = { gte: filters.firstSeenFrom };
+    }
+    if (use('lastSeenBefore') && filters.lastSeenBefore !== undefined) {
+        where.lastSeenAt = { lt: filters.lastSeenBefore };
+    }
+    if (use('priceChanged') && filters.priceChanged === true) where.priceHistory = { some: {} };
+    if (use('scanId') && filters.scanId !== undefined) {
+        where.runLinks = { some: { run: { scanDefinitionId: filters.scanId } } };
+    }
+    if (use('search') && filters.search !== undefined && filters.search.trim() !== '') {
+        const s = filters.search.trim();
+        where.OR = [
+            { sourceListingId: { contains: s } },
+            { title: { contains: s, mode: 'insensitive' } },
+            { description: { contains: s, mode: 'insensitive' } },
+            { seller: { is: { displayName: { contains: s, mode: 'insensitive' } } } },
+            { seller: { is: { officeName: { contains: s, mode: 'insensitive' } } } },
+        ];
+    }
+    return where;
+}
 
 export class PrismaListingRepository implements ListingRepository {
     constructor(private readonly prisma: PrismaClient) {}
@@ -489,6 +582,17 @@ export class PrismaListingRepository implements ListingRepository {
         }
     }
 
+    async deleteByIds(ids: string[]): Promise<number> {
+        const unique = [...new Set(ids.filter((id) => id.length > 0))];
+        if (unique.length === 0) return 0;
+        try {
+            const result = await this.prisma.listing.deleteMany({ where: { id: { in: unique } } });
+            return result.count;
+        } catch (err) {
+            throw wrapDbError(err, `deleteByIds failed for ${unique.length} ids`);
+        }
+    }
+
     async applySuccessfulRunStaleness(
         scanDefinitionId: string,
         runId: string,
@@ -574,36 +678,7 @@ export class PrismaListingRepository implements ListingRepository {
         pageSize: number,
         sort: ListingSort = { field: 'lastSeenAt', direction: 'desc' },
     ): Promise<ListingListResult> {
-        const where: Prisma.ListingWhereInput = {};
-        if (filters.status !== undefined) where.status = filters.status;
-        if (filters.province !== undefined) where.province = { equals: filters.province, mode: 'insensitive' };
-        if (filters.district !== undefined) where.district = { equals: filters.district, mode: 'insensitive' };
-        if (filters.neighborhood !== undefined) where.neighborhood = { equals: filters.neighborhood, mode: 'insensitive' };
-        if (filters.sellerType !== undefined) where.sellerType = filters.sellerType;
-        if (filters.listingType !== undefined) where.listingType = filters.listingType;
-        if (filters.propertyCategory !== undefined) where.propertyCategory = filters.propertyCategory;
-        if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
-            where.price = { gte: filters.priceMin, lte: filters.priceMax };
-        }
-        if (filters.m2Min !== undefined || filters.m2Max !== undefined) {
-            where.grossAreaM2 = { gte: filters.m2Min, lte: filters.m2Max };
-        }
-        if (filters.rooms !== undefined) where.rooms = filters.rooms;
-        if (filters.firstSeenFrom !== undefined) where.firstSeenAt = { gte: filters.firstSeenFrom };
-        if (filters.lastSeenBefore !== undefined) where.lastSeenAt = { lt: filters.lastSeenBefore };
-        if (filters.priceChanged === true) where.priceHistory = { some: {} };
-        if (filters.scanId !== undefined) where.runLinks = { some: { run: { scanDefinitionId: filters.scanId } } };
-        if (filters.search !== undefined && filters.search.trim() !== '') {
-            const s = filters.search.trim();
-            where.OR = [
-                { sourceListingId: { contains: s } },
-                { title: { contains: s, mode: 'insensitive' } },
-                { description: { contains: s, mode: 'insensitive' } },
-                { seller: { is: { displayName: { contains: s, mode: 'insensitive' } } } },
-                { seller: { is: { officeName: { contains: s, mode: 'insensitive' } } } },
-            ];
-        }
-
+        const where: Prisma.ListingWhereInput = listingWhere(filters);
         const orderBy: Prisma.ListingOrderByWithRelationInput = SORTABLE_NULLABLE.has(sort.field)
             ? { [sort.field]: { sort: sort.direction, nulls: 'last' } }
             : { [sort.field]: sort.direction };
@@ -643,6 +718,49 @@ export class PrismaListingRepository implements ListingRepository {
             page: safePage,
             pageSize: safePageSize,
         };
+    }
+
+    async listFacets(filters: ListingFilters): Promise<ListingFacets> {
+        const empty: ListingFacets = {
+            province: [],
+            district: [],
+            neighborhood: [],
+            listingType: [],
+            propertyCategory: [],
+            propertySubtype: [],
+            rooms: [],
+            heating: [],
+            buildingAge: [],
+            floor: [],
+            bathroomCount: [],
+            balcony: [],
+            furnished: [],
+            usageStatus: [],
+            insideSite: [],
+            creditEligible: [],
+            exchangeEligible: [],
+        };
+        const entries = await Promise.all(
+            FACET_COLUMNS.map(async (column: FacetColumn) => {
+                const where = listingWhere(filters, new Set([column]));
+                const groups = await this.prisma.listing.groupBy({
+                    by: [column],
+                    where: { AND: [where, { [column]: { not: null } }] },
+                    _count: { _all: true },
+                });
+                const values = groups
+                    .map((row) => ({
+                        value: row[column],
+                        count: row._count._all,
+                    }))
+                    .filter((row): row is { value: string; count: number } => typeof row.value === 'string' && row.value !== '')
+                    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'tr'))
+                    .slice(0, 80)
+                    .map((row) => row.value);
+                return [column, values] as const;
+            }),
+        );
+        return { ...empty, ...Object.fromEntries(entries) };
     }
 
     async getById(id: string): Promise<ListingDetailRecord | null> {

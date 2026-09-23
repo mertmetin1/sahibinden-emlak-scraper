@@ -43,7 +43,13 @@ export { routeLabel, type RequestLabel } from './engine/router.js';
 export { randomDelay } from './utils.js';
 
 // Challenge detection (never solving)
-export { isChallengedPage, isPxHoldChallenge, detectChallengeKind } from './engine/challenge.js';
+export { isChallengedPage, isPxHoldChallenge, isUnusualAccessHtml, detectChallengeKind } from './engine/challenge.js';
+export {
+    PROXY_HOP_EVERY,
+    isUnusualAccessUrl,
+    proxyRotationAvailable,
+    shouldHopProxy,
+} from './engine/unusual-access.js';
 
 // Error classification
 export { crawlError, classifyError, classifyErrorMessages } from './engine/errors.js';

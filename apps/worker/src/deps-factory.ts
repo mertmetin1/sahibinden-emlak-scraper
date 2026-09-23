@@ -115,6 +115,7 @@ async function resolveProxyProvider(
         logger.warn('proxyProfileId is set but browserMode is CDP — proxy ignored (real Chrome network stack)', {
             proxyProfileId: profileId,
         });
+        return new NullProxyProvider(logger);
     }
 
     const profile = await options.proxyProfiles.getProfile(profileId);

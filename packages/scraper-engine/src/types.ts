@@ -57,4 +57,4 @@ export interface CrawlDeps {
  * solves challenges programmatically (ADR-0002); it either waits for a human
  * in a visible browser or fails the request with a typed error.
  */
-export type ChallengeKind = 'cloudflare' | 'perimeterx' | 'login-wall' | 'unknown-block';
+export type ChallengeKind = 'cloudflare' | 'perimeterx' | 'login-wall' | 'unusual-access' | 'unknown-block';

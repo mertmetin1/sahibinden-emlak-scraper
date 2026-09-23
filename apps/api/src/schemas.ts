@@ -199,12 +199,24 @@ const listingFilterFields = {
     sellerType: z.enum(SELLER_TYPES).optional(),
     listingType: z.string().trim().min(1).max(50).optional(),
     propertyCategory: z.string().trim().min(1).max(100).optional(),
+    propertySubtype: z.string().trim().min(1).max(100).optional(),
     priceMin: z.coerce.number().int().min(0).optional(),
     priceMax: z.coerce.number().int().min(0).optional(),
     /** m² filters apply to grossAreaM2 (site-advertised area). */
     m2Min: z.coerce.number().int().min(0).optional(),
     m2Max: z.coerce.number().int().min(0).optional(),
     rooms: z.string().trim().min(1).max(20).optional(),
+    heating: z.string().trim().min(1).max(80).optional(),
+    buildingAge: z.string().trim().min(1).max(40).optional(),
+    floor: z.string().trim().min(1).max(40).optional(),
+    bathroomCount: z.string().trim().min(1).max(20).optional(),
+    balcony: z.string().trim().min(1).max(40).optional(),
+    furnished: z.string().trim().min(1).max(40).optional(),
+    usageStatus: z.string().trim().min(1).max(80).optional(),
+    insideSite: z.string().trim().min(1).max(40).optional(),
+    creditEligible: z.string().trim().min(1).max(40).optional(),
+    exchangeEligible: z.string().trim().min(1).max(40).optional(),
+    siteName: z.string().trim().min(1).max(120).optional(),
     firstSeenFrom: z.coerce.date().optional(),
     lastSeenBefore: z.coerce.date().optional(),
     priceChanged: queryBoolean.optional(),
@@ -339,4 +351,8 @@ export const sessionPolicyUpdateSchema = sessionPolicyCreateSchema.partial();
 
 export const idParamSchema = z.object({
     id: z.string().trim().min(1),
+});
+
+export const listingBulkDeleteSchema = z.object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
 });
